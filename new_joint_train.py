@@ -30,9 +30,11 @@ from fairseq.distributed import fsdp_enable_wrap, fsdp_wrap, utils as distribute
 from fairseq.file_io import PathManager
 from fairseq.logging import meters, metrics, progress_bar
 from fairseq.model_parallel.megatron_trainer import MegatronTrainer
-from fairseq.trainer import Trainer
+from modify_trainer import Trainer
 from omegaconf import DictConfig, OmegaConf
+from fairseq.sequence_generator import SequenceGenerator
 
+import random
 import torch
 from torch.autograd import Variable
 
@@ -135,6 +137,15 @@ def main(cfg: FairseqConfig) -> None:
     print("Discriminator criterion loaded successfully!")
     pg_criterion = PGLoss(ignore_index=task.tgt_dict.pad(), size_average=True,reduce=True)
     print("Policy gradient criterion loaded successfully!")
+    # Initialize generator
+    translator = SequenceGenerator(
+        [model],
+        task.tgt_dict
+    )
+
+    if use_cuda:
+        translator.cuda()
+    print("SequenceGenerator loaded successfully!")
     # (optionally) Configure quantization
     if cfg.common.quantization_config_path is not None:
         quantizer = quantization_utils.Quantizer(
@@ -188,7 +199,15 @@ def main(cfg: FairseqConfig) -> None:
             break
 
         # train for one epoch
-        valid_losses, should_stop = train(cfg, trainer, task, epoch_itr)
+        ## part I: use gradient policy method to train the generator
+        # use policy gradient training when random.random() > 50%
+        # if random.random()  >= 0.5:
+        #     print("Policy Gradient Training")
+        
+        # else:
+        #     # MLE training
+        #     print("MLE Training")
+        valid_losses, should_stop = train(cfg, trainer, task, epoch_itr, discriminator, translator)
         if should_stop:
             break
 
@@ -202,6 +221,8 @@ def main(cfg: FairseqConfig) -> None:
             # don't cache epoch iterators for sharded datasets
             disable_iterator_cache=task.has_sharded_data("train"),
         )
+        # part II: train the discriminator
+        
     train_meter.stop()
     logger.info("done training in {:.1f} seconds".format(train_meter.sum))
     
@@ -245,7 +266,7 @@ def should_stop_early(cfg: DictConfig, valid_loss: float) -> bool:
 
 @metrics.aggregate("train")
 def train(
-    cfg: DictConfig, trainer: Trainer, task: tasks.FairseqTask, epoch_itr
+    cfg: DictConfig, trainer: Trainer, task: tasks.FairseqTask, epoch_itr, discriminator, translator
 ) -> Tuple[List[Optional[float]], bool]:
     """Train the model for one epoch and return validation losses."""
     # Initialize data iterator
@@ -290,17 +311,24 @@ def train(
     progress.update_config(_flatten_config(cfg))
 
     trainer.begin_epoch(epoch_itr.epoch)
-
+    #print(discriminator)
     valid_subsets = cfg.dataset.valid_subset.split(",")
     should_stop = False
     num_updates = trainer.get_num_updates()
     logger.info("Start iterating over samples")
     for i, samples in enumerate(progress):
+        print(i)
         with metrics.aggregate("train_inner"), torch.autograd.profiler.record_function(
             "train_step-%d" % i
         ):
-            log_output = trainer.train_step(samples)
-
+            log_output = trainer.train_step(samples, discriminator, translator)
+            # print("--------------------START DEBUG---------------------------------")
+            # print("SAMPLE")
+            # print(samples)
+            # print("----------------------------------------------------------------")
+            # print("LOG_OUTPUT")
+            # print(log_output)
+            # print("--------------------END DEBUG----------------------------------")
         if log_output is not None:  # not OOM, overflow, ...
             # log mid-epoch stats
             num_updates = trainer.get_num_updates()
@@ -498,23 +526,22 @@ def cli_main(
     parser = options.get_training_parser()
     generator_option = ['data-bin/iwslt15.tokenized.en-vi',
                         '--arch', 'transformer_iwslt_de_en',
+                        '--reset-optimizer',
                         '--optimizer', 'adam', '--adam-betas', '(0.9, 0.98)', 
                         '--lr', '0.0005', '--clip-norm', '0.0',   
                         '--label-smoothing', '0.1', '--seed', '2048',
-                        '--max-tokens', '20000',
-                        '--fp16',
-                        '--max-epoch', '100',
+                        '--max-tokens', '15000',
+                        '--max-epoch', '17',
                         '--lr-scheduler', 'inverse_sqrt',
                         '--weight-decay', '0.0',   
                         '--criterion', 'label_smoothed_cross_entropy',
                         '--max-update', '800000', '--warmup-updates', '4000', '--warmup-init-lr' ,'1e-07',
-                        #'--no-progress-bar',
+                        '--no-progress-bar',
                         '--bpe','subword_nmt',
                         '--eval-bleu',
                         '--eval-bleu-args', '{"beam": 5, "max_len_a": 1.2, "max_len_b": 10}',
                         '--eval-bleu-remove-bpe',
                         '--eval-bleu-detok', 'moses',
-                        '--no-epoch-checkpoints',
                         '--best-checkpoint-metric', 'bleu',
                         '--maximize-best-checkpoint-metric',
                         '--restore-file', 'checkpoints/transformer/checkpoint_best.pt',
