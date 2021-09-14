@@ -667,8 +667,12 @@ class Trainer(object):
                     print("----------------------------------------------------------------")
                     print(true_sentence)
                     print("----------------------------------------------------------------")
-                    out = translator.generate([self.model],sample = sample)
-                    print(out)
+                    print("SAMPLE")
+                    print(sample_size_i)
+                    print(len(sample))
+                    with torch.no_grad():
+                        hypos = translator.generate([self.model],sample = sample)
+                    
                     print("----------------------------------------------------------------")
                     # net_output = self.model(**sample["net_input"])
                     # target = self.model.get_targets(sample, net_output).view(-1)
