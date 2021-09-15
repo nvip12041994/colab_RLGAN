@@ -187,7 +187,7 @@ class RLCriterion(LegacyFairseqCriterion):
         for i in range(max_order):
             scores[i] = min(precisions[i],recalls[i])
 
-        if self.args.modgleu:
+        if True:
             if reference_length < max_order and translation_length < max_order:
                 order = max(reference_length, translation_length)
                 scores = scores[0:order]
