@@ -44,12 +44,7 @@ class RLCriterion(LegacyFairseqCriterion):
         input = s['net_input']
         max_len = 200
         with torch.no_grad():
-            hypos = translator.generate(
-                input['src_tokens'],
-                input['src_lengths'],
-                beam_size=sample_beam,
-                maxlen=max_len,
-            )
+            hypos = translator.generate([self.model],sample = sample)
         for i, id in enumerate(s['id'].data):
             src = input['src_tokens'].data[i, :]
             # remove padding from ref
