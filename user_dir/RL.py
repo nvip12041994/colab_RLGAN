@@ -73,6 +73,8 @@ class RLCriterion(LegacyFairseqCriterion):
             # calculate bleu
             sample_ind += 1
             rewards = torch.Tensor(sample_beam).float().cuda()
+            print("----------------------------------------------------------------")
+            print(rewards)
             logprobs = torch.Tensor(sample_beam).float().cuda()
             for i in range(sample_beam):
                 hypo = hypos[i]
@@ -105,7 +107,7 @@ class RLCriterion(LegacyFairseqCriterion):
             print("----------------------------------------------------------------")
             #print(logprobs)
             print(rewards)
-            print(torch.sub(rewards - torch.mean(rewards)))
+            #print(torch.sub(rewards - torch.mean(rewards)))
             print("----------------------------------------------------------------")
             rl_loss = torch.sum(logprobs * (rewards - torch.mean(rewards)))  # one sample loss
             batch_rl_loss += rl_loss
