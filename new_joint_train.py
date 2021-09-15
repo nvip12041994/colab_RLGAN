@@ -527,7 +527,7 @@ def cli_main(
                         '--optimizer', 'adam', '--adam-betas', '(0.9, 0.98)', 
                         '--lr', '0.0005', '--clip-norm', '0.0',   
                         '--seed', '2048',
-                        '--max-tokens', '15000',                        
+                        '--max-tokens', '10000',                        
                         '--lr-scheduler', 'inverse_sqrt',
                         '--weight-decay', '0.0',
                         '--user-dir', './user_dir',   
