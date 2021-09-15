@@ -80,6 +80,7 @@ class RLCriterion(LegacyFairseqCriterion):
                 tmp = self.compute_gleu(tgt_tokens.cpu(), trans_tokens.cpu(), max_order=4, gram=2)
                 print(tmp)                
                 rewards[i] = tmp
+                print(rewards[i])
                 # one_sample loss calculation
                 tgt_input_tokens = trans_tokens.new(trans_tokens.shape).fill_(0)
                 assert trans_tokens[-1] == eos_idx
