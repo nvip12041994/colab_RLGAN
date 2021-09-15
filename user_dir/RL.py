@@ -6,7 +6,7 @@ import numpy
 from collections import defaultdict
 
 from fairseq.sequence_generator import SequenceGenerator
-from fairseq import utils, libbleu
+from fairseq import utils
 
 from fairseq.criterions import LegacyFairseqCriterion, register_criterion
 
