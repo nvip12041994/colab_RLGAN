@@ -77,7 +77,7 @@ class RLCriterion(LegacyFairseqCriterion):
             for i in range(sample_beam):
                 hypo = hypos[i]
                 trans_tokens = hypo['tokens']
-                rewards[i] = self.compute_gleu(tgt_tokens.cpu(), trans_tokens.cpu(), max_order=4, gram=0).cuda()
+                rewards[i] = self.compute_gleu(tgt_tokens.cpu(), trans_tokens.cpu(), max_order=4, gram=0)
                 # one_sample loss calculation
                 tgt_input_tokens = trans_tokens.new(trans_tokens.shape).fill_(0)
                 assert trans_tokens[-1] == eos_idx
