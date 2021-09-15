@@ -1,3 +1,2 @@
-from . import funnel_transformer
 from . import RL
-from . import simple_lstm
+from . import modify_label_smoothed_cross_entropy

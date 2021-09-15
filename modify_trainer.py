@@ -664,6 +664,7 @@ class Trainer(object):
                     # print("prev_output_tokens")
                     # print(prev_output_tokens)
                     #print(type(sample))
+
                     print("----------------------------------------------------------------")
                     print(true_sentence)
                     print("----------------------------------------------------------------")
@@ -674,6 +675,7 @@ class Trainer(object):
                         hypos = translator.generate([self.model],sample = sample)
                     
                     print("----------------------------------------------------------------")
+                    
                     # net_output = self.model(**sample["net_input"])
                     # target = self.model.get_targets(sample, net_output).view(-1)
                     # lprobs = self.model.get_normalized_probs(net_output, log_probs=True)
