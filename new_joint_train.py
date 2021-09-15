@@ -114,13 +114,13 @@ def main(cfg: FairseqConfig) -> None:
     #     )
     # )
     print("Generator loaded successfully!")
-    # use_cuda = (torch.cuda.device_count() >= 1)
-    # discriminator = Discriminator(cfg, task.src_dict, task.tgt_dict, use_cuda=use_cuda)
-    # if use_cuda:
-    #     discriminator.cuda()
-    # else:
-    #     discriminator.cpu()
-    # print("Discriminator loaded successfully!")
+    use_cuda = (torch.cuda.device_count() >= 1)
+    discriminator = Discriminator(cfg, task.src_dict, task.tgt_dict, use_cuda=use_cuda)
+    if use_cuda:
+        discriminator.cuda()
+    else:
+        discriminator.cpu()
+    print("Discriminator loaded successfully!")
     # # print("--------------------------------")
     # # print("Discriminator needed param")
     # # print(cfg.model.encoder_embed_dim)
@@ -130,18 +130,18 @@ def main(cfg: FairseqConfig) -> None:
     # # print(task.tgt_dict)
     # # print("--------------------------------")
     
-    # d_criterion = torch.nn.BCELoss()
-    # print("Discriminator criterion loaded successfully!")
-    # pg_criterion = PGLoss(ignore_index=task.tgt_dict.pad(), size_average=True,reduce=True)
-    # print("Policy gradient criterion loaded successfully!")
+    d_criterion = torch.nn.BCELoss()
+    print("Discriminator criterion loaded successfully!")
+    pg_criterion = PGLoss(ignore_index=task.tgt_dict.pad(), size_average=True,reduce=True)
+    print("Policy gradient criterion loaded successfully!")
     # Initialize generator
-    # translator = SequenceGenerator(
-    #     [model],
-    #     task.tgt_dict
-    # )
+    translator = SequenceGenerator(
+        [model],
+        task.tgt_dict
+    )
 
-    # if use_cuda:
-    #     translator.cuda()
+    if use_cuda:
+        translator.cuda()
     # print("SequenceGenerator loaded successfully!")
     # (optionally) Configure quantization
     if cfg.common.quantization_config_path is not None:
