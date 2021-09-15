@@ -11,7 +11,7 @@ from fairseq import metrics, utils
 from fairseq.criterions import FairseqCriterion, register_criterion
 from fairseq.dataclass import FairseqDataclass
 from omegaconf import II
-
+from fairseq.sequence_generator import SequenceGenerator
 
 @dataclass
 class LabelSmoothedCrossEntropyCriterionConfig(FairseqDataclass):
@@ -67,6 +67,7 @@ class LabelSmoothedCrossEntropyCriterion(FairseqCriterion):
         self.eps = label_smoothing
         self.ignore_prefix_size = ignore_prefix_size
         self.report_accuracy = report_accuracy
+        
 
     def forward(self, model, sample, reduce=True):
         """Compute the loss for the given sample.
@@ -76,6 +77,16 @@ class LabelSmoothedCrossEntropyCriterion(FairseqCriterion):
         2) the sample size, which is used as the denominator for the gradient
         3) logging outputs to display while training
         """
+        use_cuda = (torch.cuda.device_count() >= 1)
+        #Initialize generator
+        translator = SequenceGenerator(
+            [model],
+            self.task.tgt_dict
+        )
+
+        if use_cuda:
+            translator.cuda()
+        print("SequenceGenerator loaded successfully!")
         net_output = model(**sample["net_input"])
         loss, nll_loss = self.compute_loss(model, net_output, sample, reduce=reduce)
         sample_size = (

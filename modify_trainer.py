@@ -653,10 +653,10 @@ class Trainer(object):
                     )
                     #print(discriminator)
                     #print(translator)
-                    src_sentence = sample["net_input"]["src_tokens"]
-                    src_lengths = sample["net_input"]["src_lengths"]
+                    # src_sentence = sample["net_input"]["src_tokens"]
+                    # src_lengths = sample["net_input"]["src_lengths"]
                     # prev_output_tokens = sample["net_input"]["prev_output_tokens"]
-                    true_sentence = sample['target'].view(-1) 
+                    # true_sentence = sample['target'].view(-1) 
                     # print("src_sentence")
                     # print(src_sentence)
                     # print("src_lengths")
@@ -665,17 +665,17 @@ class Trainer(object):
                     # print(prev_output_tokens)
                     #print(type(sample))
 
-                    print("----------------------------------------------------------------")
-                    print(true_sentence)
-                    print("----------------------------------------------------------------")
-                    print("SAMPLE")
-                    print(sample_size_i)
-                    print(len(sample))
-                    with torch.no_grad():
-                        hypos = translator.generate([self.model],sample = sample)
+                    # print("----------------------------------------------------------------")
+                    # print(true_sentence)
+                    # print("----------------------------------------------------------------")
+                    # print("SAMPLE")
+                    # print(sample_size_i)
+                    # print(len(sample))
+                    # with torch.no_grad():
+                    #     hypos = translator.generate([self.model],sample = sample)
                     
-                    print("----------------------------------------------------------------")
-                    
+                    # print("----------------------------------------------------------------")
+
                     # net_output = self.model(**sample["net_input"])
                     # target = self.model.get_targets(sample, net_output).view(-1)
                     # lprobs = self.model.get_normalized_probs(net_output, log_probs=True)
