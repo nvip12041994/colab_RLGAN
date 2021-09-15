@@ -668,9 +668,24 @@ class Trainer(object):
                     # print("----------------------------------------------------------------")
                     # print(true_sentence)
                     # print("----------------------------------------------------------------")
-                    # print("SAMPLE")
-                    # print(sample_size_i)
+                    print("SAMPLE")
+                    print(sample_size_i)
+                    print("----------------------------------------------------------------")
                     # print(len(sample))
+                    ct = 0
+                    translations = []
+                    s = utils.move_to_cuda(sample)
+                    input = s['net_input']
+                    max_len = 200
+                    with torch.no_grad():
+                        hypos = translator.generate([self.model],sample = sample)
+                    for i, id in enumerate(s['id'].data):
+                        src = input['src_tokens'].data[i, :]
+                        # remove padding from ref
+                        ref = utils.strip_pad(s['target'].data[i, :], self.task.tgt_dict.pad()) if s['target'] is not None else None
+                        translations.append((id, src, ref, hypos[i]))
+                        ct += 1
+                    print("sample batch size:", ct)
                     # with torch.no_grad():
                     #     hypos = translator.generate([self.model],sample = sample)
                     

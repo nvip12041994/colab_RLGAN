@@ -77,16 +77,16 @@ class LabelSmoothedCrossEntropyCriterion(FairseqCriterion):
         2) the sample size, which is used as the denominator for the gradient
         3) logging outputs to display while training
         """
-        use_cuda = (torch.cuda.device_count() >= 1)
-        #Initialize generator
-        translator = SequenceGenerator(
-            [model],
-            self.task.tgt_dict
-        )
+        # use_cuda = (torch.cuda.device_count() >= 1)
+        # #Initialize generator
+        # translator = SequenceGenerator(
+        #     [model],
+        #     self.task.tgt_dict
+        # )
 
-        if use_cuda:
-            translator.cuda()
-        print("SequenceGenerator loaded successfully!")
+        # if use_cuda:
+        #     translator.cuda()
+        # print("SequenceGenerator loaded successfully!")
         net_output = model(**sample["net_input"])
         loss, nll_loss = self.compute_loss(model, net_output, sample, reduce=reduce)
         sample_size = (
