@@ -33,7 +33,7 @@ class RLCriterion(LegacyFairseqCriterion):
         # src_dict = self.task.source_dictionary
         tgt_dict = self.task.target_dictionary
         eos_idx = self.task.target_dictionary.eos()
-        sample_beam = 1
+        sample_beam = 5
         translator = SequenceGenerator([model], tgt_dict=tgt_dict,
                                        beam_size=sample_beam, min_len=1)
         translator.cuda()
@@ -73,8 +73,8 @@ class RLCriterion(LegacyFairseqCriterion):
             # calculate bleu
             sample_ind += 1
             rewards = torch.Tensor(sample_beam).float().cuda()
-            print("--------------------START DEBUG---------------------------------")
-            print(rewards)
+            #print("--------------------START DEBUG---------------------------------")
+            #print(rewards)
             logprobs = torch.Tensor(sample_beam).float().cuda()
             for i in range(sample_beam):
                 hypo = hypos[i]
@@ -104,11 +104,11 @@ class RLCriterion(LegacyFairseqCriterion):
                 logprobs[i] = torch.sum(lprob)
                 ntokens = len(train_sample['target'])
                 batch_tokens += ntokens
-            print("----------------------------------------------------------------")
+            #print("----------------------------------------------------------------")
             #print(logprobs)
-            print(rewards)
+            #print(rewards)
             #print(torch.sub(rewards - torch.mean(rewards)))
-            print("--------------------END DEBUG----------------------------------")
+            #print("--------------------END DEBUG----------------------------------")
             rl_loss = torch.sum(logprobs * (rewards - torch.mean(rewards)))  # one sample loss
             batch_rl_loss += rl_loss
         
