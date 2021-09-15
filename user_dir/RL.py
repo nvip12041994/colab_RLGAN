@@ -117,6 +117,9 @@ class RLCriterion(LegacyFairseqCriterion):
         del hypos
         del translations
         del s
+        del net_output
+        del lprobs
+        del logprobs
         print('avg_rl_loss:', avg_rl_loss)
         # if self.args.mle_weight:
         #     assert self.args.rl_weight
