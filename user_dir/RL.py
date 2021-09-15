@@ -102,10 +102,13 @@ class RLCriterion(LegacyFairseqCriterion):
                 logprobs[i] = torch.sum(lprob)
                 ntokens = len(train_sample['target'])
                 batch_tokens += ntokens
+            print("----------------------------------------------------------------")
+            print(logprobs)
+            #print(rewards)
+            print(torch.mean(rewards))
+            print("----------------------------------------------------------------")
             rl_loss = torch.sum(logprobs * (rewards - torch.mean(rewards)))  # one sample loss
-            print(rl_loss)          
             batch_rl_loss += rl_loss
-        print(batch_rl_loss)
         
         avg_rl_loss = batch_rl_loss / batch_tokens
         print('avg_rl_loss:', avg_rl_loss)
