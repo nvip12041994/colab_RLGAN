@@ -106,13 +106,15 @@ class RLCriterion(LegacyFairseqCriterion):
         
         avg_rl_loss = batch_rl_loss / batch_tokens
         print('avg_rl_loss:', avg_rl_loss)
-        if self.args.mle_weight:
-            assert self.args.rl_weight
-            total_loss = self.args.mle_weight * avg_mle_loss + self.args.rl_weight * avg_rl_loss
-            total_tokens = batch_tokens + mle_tokens
-        else:
-            total_loss = avg_rl_loss
-            total_tokens = batch_tokens
+        # if self.args.mle_weight:
+        #     assert self.args.rl_weight
+        #     total_loss = self.args.mle_weight * avg_mle_loss + self.args.rl_weight * avg_rl_loss
+        #     total_tokens = batch_tokens + mle_tokens
+        # else:
+        #     total_loss = avg_rl_loss
+        #     total_tokens = batch_tokens
+        total_loss = 0.5 * avg_mle_loss + 0.5 * avg_rl_loss
+        total_tokens = batch_tokens + mle_tokens
         logging_output = {
             'loss': utils.item(total_loss.data),
             'ntokens': total_tokens,
