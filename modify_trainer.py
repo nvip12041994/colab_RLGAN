@@ -611,7 +611,7 @@ class Trainer(object):
     @metrics.aggregate("train")
     def train_step(self, samples, discriminator = None, translator=None , raise_oom=False):
         """Do forward, backward and parameter update."""
-        print("--------------------START DEBUG---------------------------------")
+        #print("--------------------START DEBUG---------------------------------")
         self._set_seed()
         self.model.train()
         self.criterion.train()
@@ -641,7 +641,7 @@ class Trainer(object):
 
             try:
                 with maybe_no_sync():
-                    print("maybe_no_sync")
+                    # print("maybe_no_sync")
                     # forward and backward                    
                     loss, sample_size_i, logging_output = self.task.train_step(
                         sample=sample,
@@ -668,9 +668,9 @@ class Trainer(object):
                     # print("----------------------------------------------------------------")
                     # print(true_sentence)
                     # print("----------------------------------------------------------------")
-                    print("SAMPLE")
-                    print(sample_size_i)
-                    print("----------------------------------------------------------------")
+                    #print("SAMPLE")
+                    #print(sample_size_i)
+                    #print("----------------------------------------------------------------")
                     # print(len(sample))
                     ct = 0
                     translations = []
@@ -938,7 +938,7 @@ class Trainer(object):
         # print("----------------------------------------------------------------")
         # print("LOG_OUTPUT")
         #print(logging_output)
-        print("--------------------END DEBUG----------------------------------")
+        #print("--------------------END DEBUG----------------------------------")
         return logging_output
 
     @metrics.aggregate("valid")
