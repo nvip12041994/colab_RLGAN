@@ -77,10 +77,8 @@ class RLCriterion(LegacyFairseqCriterion):
             for i in range(sample_beam):
                 hypo = hypos[i]
                 trans_tokens = hypo['tokens']
-                tmp = self.compute_gleu(tgt_tokens.cpu(), trans_tokens.cpu(), max_order=4, gram=2)
-                print(tmp)                
-                rewards[i] = tmp
-                print(rewards[i])
+                rewards[i] = self.compute_gleu(tgt_tokens.cpu(), trans_tokens.cpu(), max_order=4, gram=2)
+                #print(rewards[i])
                 # one_sample loss calculation
                 tgt_input_tokens = trans_tokens.new(trans_tokens.shape).fill_(0)
                 assert trans_tokens[-1] == eos_idx
@@ -104,7 +102,7 @@ class RLCriterion(LegacyFairseqCriterion):
                 logprobs[i] = torch.sum(lprob)
                 ntokens = len(train_sample['target'])
                 batch_tokens += ntokens
-            rl_loss = torch.sum(logprobs * (rewards - rewards.mean()))  # one sample loss            
+            rl_loss = torch.sum(logprobs * (rewards - torch.mean(rewards)))  # one sample loss            
             batch_rl_loss += rl_loss
         
         avg_rl_loss = batch_rl_loss / batch_tokens
