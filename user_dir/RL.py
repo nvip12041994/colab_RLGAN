@@ -33,8 +33,8 @@ class RLCriterion(LegacyFairseqCriterion):
         # src_dict = self.task.source_dictionary
         tgt_dict = self.task.target_dictionary
         eos_idx = self.task.target_dictionary.eos()
-        sample_beam = self.args.sample_beam
-        translator = SequenceGenerator([model], tgt_dict=tgt_dict, sampling=self.args.multinomial_sample_train,
+        sample_beam = 1
+        translator = SequenceGenerator([model], tgt_dict=tgt_dict,
                                        beam_size=sample_beam, min_len=1)
         translator.cuda()
         ct = 0
