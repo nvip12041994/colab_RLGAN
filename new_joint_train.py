@@ -137,7 +137,8 @@ def main(cfg: FairseqConfig) -> None:
     # Initialize generator
     translator = SequenceGenerator(
         [model],
-        task.tgt_dict
+        task.tgt_dict,
+        beam_size=5,
     )
 
     if use_cuda:
