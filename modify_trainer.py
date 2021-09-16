@@ -611,7 +611,7 @@ class Trainer(object):
     @metrics.aggregate("train")
     def train_step(self, samples, discriminator = None, translator=None , raise_oom=False):
         """Do forward, backward and parameter update."""
-        #print("--------------------START DEBUG---------------------------------")
+        print("--------------------START DEBUG---------------------------------")
         self._set_seed()
         self.model.train()
         self.criterion.train()
@@ -674,20 +674,22 @@ class Trainer(object):
                     #print(sample_size_i)
                     #print("----------------------------------------------------------------")
                     # print(len(sample))
-                    ct = 0
-                    translations = []
-                    s = utils.move_to_cuda(sample)
-                    input = s['net_input']
-                    max_len = 200
-                    with torch.no_grad():
-                        hypos = translator.generate([self.model],sample = sample)
-                    for i, id in enumerate(s['id'].data):
-                        src = input['src_tokens'].data[i, :]
-                        # remove padding from ref
-                        ref = utils.strip_pad(s['target'].data[i, :], self.task.tgt_dict.pad()) if s['target'] is not None else None
-                        translations.append((id, src, ref, hypos[i]))
-                        ct += 1
-                    print("sample batch size:", ct)
+                    
+                    # ct = 0
+                    # translations = []
+                    # s = utils.move_to_cuda(sample)
+                    # input = s['net_input']
+                    # max_len = 200
+                    # with torch.no_grad():
+                    #     hypos = translator.generate([self.model],sample = sample)
+                    # for i, id in enumerate(s['id'].data):
+                    #     src = input['src_tokens'].data[i, :]
+                    #     # remove padding from ref
+                    #     ref = utils.strip_pad(s['target'].data[i, :], self.task.tgt_dict.pad()) if s['target'] is not None else None
+                    #     translations.append((id, src, ref, hypos[i]))
+                    #     ct += 1
+                    # print("sample batch size:", ct)
+
                     # with torch.no_grad():
                     #     hypos = translator.generate([self.model],sample = sample)
                     
@@ -940,7 +942,7 @@ class Trainer(object):
         # print("----------------------------------------------------------------")
         # print("LOG_OUTPUT")
         #print(logging_output)
-        #print("--------------------END DEBUG----------------------------------")
+        print("--------------------END DEBUG----------------------------------")
         return logging_output
 
     @metrics.aggregate("valid")
