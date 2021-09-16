@@ -59,7 +59,7 @@ class FairseqCriterion(_Loss):
                 )
         return cls(**init_args)
 
-    def forward(self, model, sample, reduce=True):
+    def forward(self, model, sample,translator, reduce=True):
         """Compute the loss for the given sample.
 
         Returns a tuple with three elements:

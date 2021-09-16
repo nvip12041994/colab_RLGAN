@@ -26,7 +26,7 @@ class RLCriterion(LegacyFairseqCriterion):
             metavar="number",
             help="number of sample size",
         )
-    def forward(self, model, sample, reduce=True):
+    def forward(self, model, sample,translator, reduce=True):
         # sample mode
         #print('!!!RL loss.')
         model.eval()
@@ -34,9 +34,7 @@ class RLCriterion(LegacyFairseqCriterion):
         tgt_dict = self.task.target_dictionary
         eos_idx = self.task.target_dictionary.eos()
         sample_beam = 5
-        translator = SequenceGenerator([model], tgt_dict=tgt_dict,
-                                       beam_size=sample_beam, min_len=1)
-        translator.cuda()
+        
         ct = 0
         translations = []
 
