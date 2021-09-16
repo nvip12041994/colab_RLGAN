@@ -650,6 +650,8 @@ class Trainer(object):
                         optimizer=self.optimizer,
                         update_num=self.get_num_updates(),
                         ignore_grad=is_dummy_batch,
+                        discriminator=discriminator, 
+                        translator=translator,
                     )
                     #print(discriminator)
                     #print(translator)

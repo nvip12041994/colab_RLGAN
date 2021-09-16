@@ -137,12 +137,13 @@ def main(cfg: FairseqConfig) -> None:
     # Initialize generator
     translator = SequenceGenerator(
         [model],
-        task.tgt_dict
+        task.tgt_dict,
+        beam_size=2,
     )
 
     if use_cuda:
         translator.cuda()
-    # print("SequenceGenerator loaded successfully!")
+    print("SequenceGenerator loaded successfully!")
     # (optionally) Configure quantization
     if cfg.common.quantization_config_path is not None:
         quantizer = quantization_utils.Quantizer(
