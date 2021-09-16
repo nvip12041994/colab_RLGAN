@@ -29,6 +29,7 @@ class RLCriterion(LegacyFairseqCriterion):
     def forward(self, model, sample,translator, reduce=True):
         # sample mode
         #print('!!!RL loss.')
+        print(translator)
         model.eval()
         # src_dict = self.task.source_dictionary
         tgt_dict = self.task.target_dictionary
