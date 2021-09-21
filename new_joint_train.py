@@ -138,7 +138,7 @@ def main(cfg: FairseqConfig) -> None:
     translator = SequenceGenerator(
         [model],
         task.tgt_dict,
-        beam_size=2,
+        beam_size=1,
     )
 
     if use_cuda:
@@ -205,7 +205,7 @@ def main(cfg: FairseqConfig) -> None:
         # else:
         #     # MLE training
         #     print("MLE Training")
-        valid_losses, should_stop = train(cfg, trainer, task, epoch_itr, discriminator, translator)
+        valid_losses, should_stop = train(cfg, trainer, task, epoch_itr, discriminator, translator, pg_criterion, d_criterion)
         if should_stop:
             break
 
@@ -264,7 +264,7 @@ def should_stop_early(cfg: DictConfig, valid_loss: float) -> bool:
 
 @metrics.aggregate("train")
 def train(
-    cfg: DictConfig, trainer: Trainer, task: tasks.FairseqTask, epoch_itr, discriminator, translator
+    cfg: DictConfig, trainer: Trainer, task: tasks.FairseqTask, epoch_itr, discriminator, translator, pg_criterion, d_criterion
 ) -> Tuple[List[Optional[float]], bool]:
     """Train the model for one epoch and return validation losses."""
     # Initialize data iterator
@@ -319,7 +319,7 @@ def train(
         with metrics.aggregate("train_inner"), torch.autograd.profiler.record_function(
             "train_step-%d" % i
         ):
-            log_output = trainer.train_step(samples, discriminator, translator)
+            log_output = trainer.train_step(samples, discriminator, translator, pg_criterion, d_criterion)
             # print("--------------------START DEBUG---------------------------------")
             # print("SAMPLE")
             # print(samples)
@@ -528,8 +528,8 @@ def cli_main(
                         '--optimizer', 'adam', '--adam-betas', '(0.9, 0.98)', 
                         '--lr', '0.0005', '--clip-norm', '0.0',   
                         '--label-smoothing', '0.1', '--seed', '2048',
-                        '--max-tokens', '15000',
-                        '--max-epoch', '19',
+                        '--max-tokens', '1000',
+                        '--max-epoch', '33',
                         '--lr-scheduler', 'inverse_sqrt',
                         '--weight-decay', '0.0',
                         '--user-dir', './user_dir',   
@@ -544,7 +544,7 @@ def cli_main(
                         '--best-checkpoint-metric', 'bleu',
                         '--maximize-best-checkpoint-metric',
                         '--restore-file', 'checkpoints/transformer/checkpoint_best.pt',
-                        '--update-freq', '2',
+                        '--update-freq', '1',
                         '--save-dir', 'checkpoints/transformer']
     
     args = options.parse_args_and_arch(parser, input_args= generator_option, modify_parser=modify_parser)

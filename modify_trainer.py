@@ -609,7 +609,8 @@ class Trainer(object):
         self._dummy_batch = batch
 
     @metrics.aggregate("train")
-    def train_step(self, samples, discriminator = None, translator=None , raise_oom=False):
+    def train_step(self, samples, discriminator = None, translator=None , 
+                   pg_criterion=None, d_criterion = None, raise_oom=False):
         """Do forward, backward and parameter update."""
         print("--------------------START DEBUG---------------------------------")
         self._set_seed()
@@ -652,6 +653,8 @@ class Trainer(object):
                         ignore_grad=is_dummy_batch,
                         discriminator=discriminator, 
                         translator=translator,
+                        pg_criterion = pg_criterion, 
+                        d_criterion = d_criterion,
                     )
                     #print(discriminator)
                     #print(translator)

@@ -12,7 +12,13 @@ from fairseq.criterions import FairseqCriterion, register_criterion
 from fairseq.dataclass import FairseqDataclass
 from omegaconf import II
 from fairseq.sequence_generator import SequenceGenerator
+from fairseq import scoring
 
+def get_symbols_to_strip_from_output(generator):
+    if hasattr(generator, "symbols_to_strip_from_output"):
+        return generator.symbols_to_strip_from_output
+    else:
+        return {generator.eos}
 @dataclass
 class LabelSmoothedCrossEntropyCriterionConfig(FairseqDataclass):
     label_smoothing: float = field(
@@ -68,8 +74,13 @@ class LabelSmoothedCrossEntropyCriterion(FairseqCriterion):
         self.ignore_prefix_size = ignore_prefix_size
         self.report_accuracy = report_accuracy
         
+        self.tgt_dict = task.target_dictionary
+        self.src_dict = task.source_dictionary
+        self.scorer = scoring.build_scorer("bleu", self.tgt_dict)
+        
 
-    def forward(self, model, sample,discriminator=None, translator=None, reduce=True):
+    def forward(self, model, sample,discriminator=None, translator=None, 
+                pg_criterion= None, d_criterion = None, reduce=True):
         """Compute the loss for the given sample.
 
         Returns a tuple with three elements:
@@ -80,6 +91,53 @@ class LabelSmoothedCrossEntropyCriterion(FairseqCriterion):
         print(type(discriminator))
         print(type(translator))
         net_output = model(**sample["net_input"])
+        
+        model.eval()
+        with torch.no_grad():
+            hypos = translator.generate([model],sample = sample)
+        num_generated_tokens = sum(len(h[0]["tokens"]) for h in hypos)
+        for i, sample_id in enumerate(sample["id"].tolist()):
+            has_target = sample["target"] is not None
+
+            # Remove padding
+            if "src_tokens" in sample["net_input"]:
+                src_tokens = utils.strip_pad(
+                    sample["net_input"]["src_tokens"][i, :], self.tgt_dict.pad()
+                )
+            else:
+                src_tokens = None
+
+            target_tokens = None
+            if has_target:
+                target_tokens = (
+                    utils.strip_pad(sample["target"][i, :], self.tgt_dict.pad()).int().cpu()
+                )
+            src_str = self.src_dict.string(src_tokens, None)
+            target_str = self.tgt_dict.string(
+                        target_tokens,
+                        None,
+                        escape_unk=True,
+                        extra_symbols_to_ignore=get_symbols_to_strip_from_output(translator),
+                    )
+            # Process top predictions
+            for j, hypo in enumerate(hypos[i][: 1]): # nbest = 1
+                hypo_tokens, hypo_str, alignment = utils.post_process_prediction(
+                    hypo_tokens=hypo["tokens"].int().cpu(),
+                    src_str=src_str,
+                    alignment=None,
+                    align_dict=None,
+                    tgt_dict=self.tgt_dict,
+                    remove_bpe=None,
+                    extra_symbols_to_ignore=get_symbols_to_strip_from_output(translator),
+                )
+                self.scorer.add(target_tokens, hypo_tokens)
+        print(self.scorer.result_string())
+        
+        true = utils.move_to_cuda(target_tokens)
+        fake = utils.move_to_cuda(hypo_tokens)
+        disc_out = discriminator(true, fake)
+        #-------------------------MLE----------------------
+        model.train()
         loss, nll_loss = self.compute_loss(model, net_output, sample, reduce=reduce)
         sample_size = (
             sample["target"].size(0) if self.sentence_avg else sample["ntokens"]
@@ -91,6 +149,8 @@ class LabelSmoothedCrossEntropyCriterion(FairseqCriterion):
             "nsentences": sample["target"].size(0),
             "sample_size": sample_size,
         }
+        
+            
         if self.report_accuracy:
             n_correct, total = self.compute_accuracy(model, net_output, sample)
             logging_output["n_correct"] = utils.item(n_correct.data)
