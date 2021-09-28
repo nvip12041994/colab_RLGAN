@@ -13,12 +13,29 @@ from fairseq.dataclass import FairseqDataclass
 from omegaconf import II
 from fairseq.sequence_generator import SequenceGenerator
 from fairseq import scoring
+import numpy as np
+
+def padding_to_fixed_length(imput_list,max_len,pad):
+    tmp_list = []
+    for item in imput_list:
+        len_tmp = len(item)
+        number_to_pad = max_len - len_tmp
+        np_tmp = np.pad(item, (0, number_to_pad), 'constant', constant_values=(pad, pad))
+        tmp_list.append(np_tmp)
+    np_array = np.asarray(tmp_list)
+    return np_array
+
+def FindMaxLength(lst):
+    maxList = max(lst, key = lambda i: len(i))
+    maxLength = len(maxList)
+    return maxLength
 
 def get_symbols_to_strip_from_output(generator):
     if hasattr(generator, "symbols_to_strip_from_output"):
         return generator.symbols_to_strip_from_output
     else:
         return {generator.eos}
+    
 @dataclass
 class LabelSmoothedCrossEntropyCriterionConfig(FairseqDataclass):
     label_smoothing: float = field(
@@ -79,8 +96,7 @@ class LabelSmoothedCrossEntropyCriterion(FairseqCriterion):
         self.scorer = scoring.build_scorer("bleu", self.tgt_dict)
         
 
-    def forward(self, model, sample,discriminator=None, translator=None, 
-                pg_criterion= None, d_criterion = None, reduce=True):
+    def forward(self, model, sample, user_parameter = None,reduce=True):
         """Compute the loss for the given sample.
 
         Returns a tuple with three elements:
@@ -88,40 +104,51 @@ class LabelSmoothedCrossEntropyCriterion(FairseqCriterion):
         2) the sample size, which is used as the denominator for the gradient
         3) logging outputs to display while training
         """
+        
+        net_output = model(**sample["net_input"])       
+        discriminator = user_parameter["discriminator"]
+        translator = user_parameter["translator"]
+        pg_criterion = user_parameter["pg_criterion"]
+        d_criterion = user_parameter["d_criterion"]
         print(type(discriminator))
         print(type(translator))
-        net_output = model(**sample["net_input"])
-        
         model.eval()
         with torch.no_grad():
             hypos = translator.generate([model],sample = sample)
-        num_generated_tokens = sum(len(h[0]["tokens"]) for h in hypos)
+        #num_generated_tokens = sum(len(h[0]["tokens"]) for h in hypos)
+        
+        tmp_hypo_tokens = []        
+        max_len_hypo = 0
+        
         for i, sample_id in enumerate(sample["id"].tolist()):
             has_target = sample["target"] is not None
 
             # Remove padding
             if "src_tokens" in sample["net_input"]:
-                src_tokens = utils.strip_pad(
+                src_token = utils.strip_pad(
                     sample["net_input"]["src_tokens"][i, :], self.tgt_dict.pad()
                 )
             else:
-                src_tokens = None
+                src_token = None
 
-            target_tokens = None
+            target_token = None
+            
             if has_target:
-                target_tokens = (
+                target_token = (
                     utils.strip_pad(sample["target"][i, :], self.tgt_dict.pad()).int().cpu()
                 )
-            src_str = self.src_dict.string(src_tokens, None)
+            
+            src_str = self.src_dict.string(src_token, None)
             target_str = self.tgt_dict.string(
-                        target_tokens,
+                        target_token,
                         None,
                         escape_unk=True,
                         extra_symbols_to_ignore=get_symbols_to_strip_from_output(translator),
                     )
             # Process top predictions
+            prev_len_hypo = max_len_hypo
             for j, hypo in enumerate(hypos[i][: 1]): # nbest = 1
-                hypo_tokens, hypo_str, alignment = utils.post_process_prediction(
+                hypo_token, hypo_str, alignment = utils.post_process_prediction(
                     hypo_tokens=hypo["tokens"].int().cpu(),
                     src_str=src_str,
                     alignment=None,
@@ -130,12 +157,34 @@ class LabelSmoothedCrossEntropyCriterion(FairseqCriterion):
                     remove_bpe=None,
                     extra_symbols_to_ignore=get_symbols_to_strip_from_output(translator),
                 )
-                self.scorer.add(target_tokens, hypo_tokens)
+                self.scorer.add(target_token, hypo_token)
+            if hypo_token.shape[0] > prev_len_hypo:
+                max_len_hypo = hypo_token.shape[0]
+            
+            
+            tmp_hypo_tokens.append(hypo_token.cpu().tolist())
+            
+        
+        #np_target_tokens = padding_to_fixed_length(tmp_target_tokens,max_len_target,self.tgt_dict.pad())
+        np_hypo_tokens = padding_to_fixed_length(tmp_hypo_tokens,max_len_hypo,self.tgt_dict.pad())
+        test = sample['target']
+        src_tokens = sample['net_input']['src_tokens']
+        #target_tokens = torch.Tensor(np_target_tokens).to(src_tokens.dtype).to(src_tokens.device)
+        hypo_tokens = torch.Tensor(np_hypo_tokens).to(src_tokens.dtype).to(src_tokens.device)
+        
+        print("src_tokens shape" + str(src_tokens.shape))
+        
+        del tmp_hypo_tokens
         print(self.scorer.result_string())
         
-        true = utils.move_to_cuda(target_tokens)
-        fake = utils.move_to_cuda(hypo_tokens)
-        disc_out = discriminator(true, fake)
+        # print(src_str)
+        # print(target_str)
+        # print(hypo_str)
+        #true = utils.move_to_cuda(target_tokens)
+
+       
+        
+        disc_out = discriminator(target_tokens, hypo_tokens)
         #-------------------------MLE----------------------
         model.train()
         loss, nll_loss = self.compute_loss(model, net_output, sample, reduce=reduce)

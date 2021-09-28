@@ -133,6 +133,7 @@ def main(cfg: FairseqConfig) -> None:
     d_criterion = torch.nn.BCELoss()
     print("Discriminator criterion loaded successfully!")
     pg_criterion = PGLoss(ignore_index=task.tgt_dict.pad(), size_average=True,reduce=True)
+
     print("Policy gradient criterion loaded successfully!")
     # Initialize generator
     translator = SequenceGenerator(
@@ -184,9 +185,8 @@ def main(cfg: FairseqConfig) -> None:
     max_epoch = cfg.optimization.max_epoch or math.inf
     lr = trainer.get_lr()
     train_meter = meters.StopwatchMeter()
-    train_meter.start()
-    print("Start training")
-    
+    train_meter.start()    
+    print("Start training")     
     while epoch_itr.next_epoch_idx <= max_epoch:
         if lr <= cfg.optimization.stop_min_lr:
             logger.info(
@@ -197,14 +197,6 @@ def main(cfg: FairseqConfig) -> None:
             break
 
         # train for one epoch
-        ## part I: use gradient policy method to train the generator
-        # use policy gradient training when random.random() > 50%
-        # if random.random()  >= 0.5:
-        #     print("Policy Gradient Training")
-        
-        # else:
-        #     # MLE training
-        #     print("MLE Training")
         valid_losses, should_stop = train(cfg, trainer, task, epoch_itr, discriminator, translator, pg_criterion, d_criterion)
         if should_stop:
             break
@@ -267,6 +259,18 @@ def train(
     cfg: DictConfig, trainer: Trainer, task: tasks.FairseqTask, epoch_itr, discriminator, translator, pg_criterion, d_criterion
 ) -> Tuple[List[Optional[float]], bool]:
     """Train the model for one epoch and return validation losses."""
+    
+    max_len_src = epoch_itr.dataset.src.sizes.max()
+    max_len_target = epoch_itr.dataset.tgt.sizes.max()
+    user_parameter = {
+        "max_len_src": max_len_src,
+        "max_len_target": max_len_target,
+        "discriminator": discriminator, 
+        "translator": translator, 
+        "pg_criterion": pg_criterion, 
+        "d_criterion": d_criterion, 
+    }
+    
     # Initialize data iterator
     itr = epoch_itr.next_epoch_itr(
         fix_batches_to_gpus=cfg.distributed_training.fix_batches_to_gpus,
@@ -315,11 +319,11 @@ def train(
     num_updates = trainer.get_num_updates()
     logger.info("Start iterating over samples")
     for i, samples in enumerate(progress):
-        print(i)
+        print(i)        
         with metrics.aggregate("train_inner"), torch.autograd.profiler.record_function(
             "train_step-%d" % i
         ):
-            log_output = trainer.train_step(samples, discriminator, translator, pg_criterion, d_criterion)
+            log_output = trainer.train_step(samples, user_parameter)
             # print("--------------------START DEBUG---------------------------------")
             # print("SAMPLE")
             # print(samples)

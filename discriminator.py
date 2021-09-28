@@ -19,7 +19,7 @@ class Discriminator(nn.Module):
 
 
         self.conv1 = nn.Sequential(
-            Conv2d(in_channels=2000,
+            Conv2d(in_channels=1024,
                    out_channels=512,
                    kernel_size=3,
                    stride=1,
@@ -42,7 +42,7 @@ class Discriminator(nn.Module):
 
         self.classifier = nn.Sequential(
             nn.Dropout(),
-            Linear(256 * 12 * 12, 20),
+            Linear(17920, 20),
             nn.ReLU(),
             nn.Dropout(),
             Linear(20, 20),
@@ -54,22 +54,23 @@ class Discriminator(nn.Module):
         batch_size = src_sentence.size(0)
 
         src_out = self.embed_src_tokens(src_sentence)
-        trg_out = self.embed_src_tokens(trg_sentence)
+        trg_out = self.embed_trg_tokens(trg_sentence)
 
         src_out = torch.stack([src_out] * trg_out.size(1), dim=2)
         trg_out = torch.stack([trg_out] * src_out.size(1), dim=1)
         
         out = torch.cat([src_out, trg_out], dim=3)
-        
+        print("1 shape" + str(out.shape))
         out = out.permute(0,3,1,2)
-        
+        print("2 shape" + str(out.shape))
         out = self.conv1(out)
+        print("3 shape" + str(out.shape))
         out = self.conv2(out)
-        
+        print("4 shape" + str(out.shape))
         out = out.permute(0, 2, 3, 1)
-        
+        print("5 shape" + str(out.shape))
         out = out.contiguous().view(batch_size, -1)
-        
+        print("6 shape" + str(out.shape))
         out = torch.sigmoid(self.classifier(out))
 
         return out
