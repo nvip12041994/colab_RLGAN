@@ -81,8 +81,8 @@ def translate_from_sample(network,user_parameter,sample,scorer,src_dict,tgt_dict
     
     with torch.no_grad():
         hypos = translator.generate([network],sample = tmp_samples)
-    #num_generated_tokens = sum(len(h[0]["tokens"]) for h in hypos)
-    
+    num_generated_tokens = sum(len(h[0]["tokens"]) for h in hypos)
+    print(num_generated_tokens)
     tmp_hypo_tokens = []        
     #max_len_hypo = 0
     
@@ -225,13 +225,14 @@ class LabelSmoothedCrossEntropyCriterion(FairseqCriterion):
             "nsentences": sample["target"].size(0),
             "sample_size": sample_size,
         }
-        # part II: train the discriminator
-        src_tokens, target_tokens, hypo_tokens = translate_from_sample(model,user_parameter,sample,self.scorer,self.src_dict,self.tgt_dict)
-        output_parameter = {
-            "src_tokens": src_tokens,
-            "target_tokens": target_tokens,
-            "hypo_tokens": hypo_tokens,
-        }
+        if user_parameter is not None:    
+            # part II: train the discriminator
+            src_tokens, target_tokens, hypo_tokens = translate_from_sample(model,user_parameter,sample,self.scorer,self.src_dict,self.tgt_dict)
+            output_parameter = {
+                "src_tokens": src_tokens,
+                "target_tokens": target_tokens,
+                "hypo_tokens": hypo_tokens,
+            }
         # train_discriminator(user_parameter,
         #                     hypo_input = hypo_tokens,
         #                     target_input=target_tokens,
