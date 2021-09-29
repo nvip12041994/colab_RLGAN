@@ -52,7 +52,7 @@ class Discriminator(nn.Module):
 
     def forward(self, src_sentence, trg_sentence):
         batch_size = src_sentence.size(0)
-
+        print("batch_size: " + str(batch_size))
         src_out = self.embed_src_tokens(src_sentence)
         trg_out = self.embed_trg_tokens(trg_sentence)
 
@@ -60,17 +60,17 @@ class Discriminator(nn.Module):
         trg_out = torch.stack([trg_out] * src_out.size(1), dim=1)
         
         out = torch.cat([src_out, trg_out], dim=3)
-        print("1 shape" + str(out.shape))
+        #print("1 shape" + str(out.shape))
         out = out.permute(0,3,1,2)
-        print("2 shape" + str(out.shape))
+        #print("2 shape" + str(out.shape))
         out = self.conv1(out)
-        print("3 shape" + str(out.shape))
+        #print("3 shape" + str(out.shape))
         out = self.conv2(out)
-        print("4 shape" + str(out.shape))
+        #print("4 shape" + str(out.shape))
         out = out.permute(0, 2, 3, 1)
-        print("5 shape" + str(out.shape))
+        #print("5 shape" + str(out.shape))
         out = out.contiguous().view(batch_size, -1)
-        print("6 shape" + str(out.shape))
+        #print("6 shape" + str(out.shape))
         out = torch.sigmoid(self.classifier(out))
 
         return out

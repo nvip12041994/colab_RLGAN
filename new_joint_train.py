@@ -121,6 +121,11 @@ def main(cfg: FairseqConfig) -> None:
         discriminator.cuda()
     else:
         discriminator.cpu()
+    d_optimizer = eval("torch.optim." + 'SGD')(filter(lambda x: x.requires_grad,
+                                                                 discriminator.parameters()),
+                                                          0.0001,
+                                                          momentum=0.9,
+                                                          nesterov=True)
     print("Discriminator loaded successfully!")
     # # print("--------------------------------")
     # # print("Discriminator needed param")
@@ -200,7 +205,7 @@ def main(cfg: FairseqConfig) -> None:
             break
 
         # train for one epoch
-        valid_losses, should_stop = train(cfg, trainer, task, epoch_itr, discriminator, translator, pg_criterion, d_criterion)
+        valid_losses, should_stop = train(cfg, trainer, task, epoch_itr, discriminator, translator, pg_criterion, d_criterion,d_optimizer)
         if should_stop:
             break
 
@@ -259,7 +264,7 @@ def should_stop_early(cfg: DictConfig, valid_loss: float) -> bool:
 
 @metrics.aggregate("train")
 def train(
-    cfg: DictConfig, trainer: Trainer, task: tasks.FairseqTask, epoch_itr, discriminator, translator, pg_criterion, d_criterion
+    cfg: DictConfig, trainer: Trainer, task: tasks.FairseqTask, epoch_itr, discriminator, translator, pg_criterion, d_criterion, d_optimizer
 ) -> Tuple[List[Optional[float]], bool]:
     """Train the model for one epoch and return validation losses."""
     
@@ -269,11 +274,12 @@ def train(
     user_parameter = {
         "max_len_src": max_len_src,
         "max_len_target": max_len_target,
+        "max_len_hypo": max_len_hypo,
         "discriminator": discriminator, 
         "translator": translator, 
         "pg_criterion": pg_criterion, 
         "d_criterion": d_criterion,
-        "max_len_hypo": max_len_hypo,
+        "d_optimizer": d_optimizer,
     }
     
     # Initialize data iterator
@@ -329,6 +335,12 @@ def train(
             "train_step-%d" % i
         ):
             log_output = trainer.train_step(samples, user_parameter)
+            # t = torch.cuda.get_device_properties(0).total_memory
+            # r = torch.cuda.memory_reserved(0)
+            # a = torch.cuda.memory_allocated(0)
+            # f = (r-a)/ 1024 / 1024 / 1024  # free inside reserved
+            # print("GPU memory occupied by tensors {:.3f} GB".format(a/ 1024 / 1024 / 1024))
+            # print("free {:.3f} GB".format(f))
             # log mid-epoch stats
             num_updates = trainer.get_num_updates()
             if num_updates % cfg.common.log_interval == 0:
@@ -529,7 +541,7 @@ def cli_main(
                         '--optimizer', 'adam', '--adam-betas', '(0.9, 0.98)', 
                         '--lr', '0.0005', '--clip-norm', '0.0',   
                         '--label-smoothing', '0.1', '--seed', '2048',
-                        '--max-tokens', '10000',
+                        '--max-tokens', '5000',
                         '--max-epoch', '33',
                         '--lr-scheduler', 'inverse_sqrt',
                         '--weight-decay', '0.0',

@@ -17,6 +17,7 @@ from fairseq import scoring
 import numpy as np
 import torch.nn.functional as F
 import copy
+from torch.autograd import Variable
 
 def tensor_padding_to_fixed_length(input_tensor,max_len,pad):
     output_tensor = input_tensor.cpu()
@@ -44,7 +45,103 @@ def get_symbols_to_strip_from_output(generator):
         return generator.symbols_to_strip_from_output
     else:
         return {generator.eos}
+
+def train_discriminator(user_parameter,hypo_input,src_input,target_input):
+    user_parameter["discriminator"].train()
+    fake_labels = Variable(torch.zeros(target_input.size(0)).float())
+    fake_labels = fake_labels.to(src_input.device)
+        
+    disc_out = user_parameter["discriminator"](target_input, hypo_input)
+    d_loss = user_parameter["d_criterion"](disc_out.squeeze(1), fake_labels)
+    acc = torch.sum(torch.round(disc_out).squeeze(1) == fake_labels).float() / len(fake_labels)
+    print("Discriminator accuracy {:.3f}".format(acc))
+    user_parameter["d_optimizer"].zero_grad()
+    d_loss.backward()
+    user_parameter["d_optimizer"].step()
+
+def translate_from_sample(network,user_parameter,sample,scorer,src_dict,tgt_dict):
+    network.eval()        
+    tmp_samples = copy.deepcopy(sample)    
+    translator = user_parameter["translator"]
     
+    tmp_target_tokens = tmp_samples['target']
+    target_tokens = tensor_padding_to_fixed_length(tmp_target_tokens,user_parameter["max_len_target"],tgt_dict.pad())
+    target_tokens = target_tokens.to(sample['target'].device)
+    
+    tmp_src_tokens = tmp_samples['net_input']['src_tokens']               
+    src_tokens = tensor_padding_to_fixed_length(tmp_src_tokens,user_parameter["max_len_src"],src_dict.pad())        
+    src_tokens = src_tokens.to(sample['net_input']['src_tokens'].device)
+    
+    # print("padding src_tokens shape" + str(src_tokens.shape))
+    # print("padding target_tokens shape" + str(target_tokens.shape))
+    
+    tmp_samples['target'] = target_tokens
+    tmp_samples['net_input']['src_tokens'] = src_tokens
+    
+    
+    with torch.no_grad():
+        hypos = translator.generate([network],sample = tmp_samples)
+    #num_generated_tokens = sum(len(h[0]["tokens"]) for h in hypos)
+    
+    tmp_hypo_tokens = []        
+    #max_len_hypo = 0
+    
+    for i, sample_id in enumerate(tmp_samples["id"].tolist()):
+        has_target = tmp_samples["target"] is not None
+
+        # Remove padding
+        if "src_tokens" in tmp_samples["net_input"]:
+            src_token = utils.strip_pad(
+                tmp_samples["net_input"]["src_tokens"][i, :], tgt_dict.pad()
+            )
+        else:
+            src_token = None
+
+        target_token = None
+        
+        if has_target:
+            target_token = (
+                utils.strip_pad(tmp_samples["target"][i, :], tgt_dict.pad()).int().cpu()
+            )
+        
+        src_str = src_dict.string(src_token, None)
+        target_str = tgt_dict.string(
+                    target_token,
+                    None,
+                    escape_unk=True,
+                    extra_symbols_to_ignore=get_symbols_to_strip_from_output(translator),
+                )
+        # Process top predictions
+        #prev_len_hypo = max_len_hypo
+        for j, hypo in enumerate(hypos[i][: 1]): # nbest = 1
+            hypo_token, hypo_str, alignment = utils.post_process_prediction(
+                hypo_tokens=hypo["tokens"].int().cpu(),
+                src_str=src_str,
+                alignment=None,
+                align_dict=None,
+                tgt_dict=tgt_dict,
+                remove_bpe=None,
+                extra_symbols_to_ignore=get_symbols_to_strip_from_output(translator),
+            )
+            scorer.add(target_token, hypo_token)
+        # if hypo_token.shape[0] > prev_len_hypo:
+        #     max_len_hypo = hypo_token.shape[0]       
+        tmp_hypo_tokens.append(hypo_token.cpu().tolist())
+    
+    #np_target_tokens = padding_to_fixed_length(tmp_target_tokens,max_len_target,self.tgt_dict.pad())
+    np_hypo_tokens = numpy_padding_to_fixed_length(tmp_hypo_tokens,user_parameter['max_len_hypo'],tgt_dict.pad())
+    
+    #target_tokens = torch.Tensor(np_target_tokens).to(src_tokens.dtype).to(src_tokens.device)
+    hypo_tokens = torch.Tensor(np_hypo_tokens).to(src_tokens.dtype).to(src_tokens.device)        
+    del tmp_samples
+    del tmp_target_tokens
+    del tmp_src_tokens
+    del tmp_hypo_tokens
+    del np_hypo_tokens
+    torch.cuda.empty_cache()
+    print(scorer.result_string())
+    return src_tokens,target_tokens,hypo_tokens
+
 @dataclass
 class LabelSmoothedCrossEntropyCriterionConfig(FairseqDataclass):
     label_smoothing: float = field(
@@ -114,105 +211,7 @@ class LabelSmoothedCrossEntropyCriterion(FairseqCriterion):
         3) logging outputs to display while training
         """
         
-        net_output = model(**sample["net_input"])
-        
-        model.eval()
-        
-        tmp_samples = copy.deepcopy(sample)
-        discriminator = user_parameter["discriminator"]
-        translator = user_parameter["translator"]
-        pg_criterion = user_parameter["pg_criterion"]
-        d_criterion = user_parameter["d_criterion"]
-        
-        
-        tmp_target_tokens = tmp_samples['target']
-        target_tokens = tensor_padding_to_fixed_length(tmp_target_tokens,user_parameter["max_len_target"],self.tgt_dict.pad())
-        target_tokens = target_tokens.to(sample['target'].device)
-        
-        tmp_src_tokens = tmp_samples['net_input']['src_tokens']               
-        src_tokens = tensor_padding_to_fixed_length(tmp_src_tokens,user_parameter["max_len_src"],self.src_dict.pad())        
-        src_tokens = src_tokens.to(sample['net_input']['src_tokens'].device)
-        
-        # print("padding src_tokens shape" + str(src_tokens.shape))
-        # print("padding target_tokens shape" + str(target_tokens.shape))
-        
-        tmp_samples['target'] = target_tokens
-        tmp_samples['net_input']['src_tokens'] = src_tokens
-        
-        
-        with torch.no_grad():
-            hypos = translator.generate([model],sample = tmp_samples)
-        #num_generated_tokens = sum(len(h[0]["tokens"]) for h in hypos)
-        
-        tmp_hypo_tokens = []        
-        #max_len_hypo = 0
-        
-        for i, sample_id in enumerate(tmp_samples["id"].tolist()):
-            has_target = tmp_samples["target"] is not None
-
-            # Remove padding
-            if "src_tokens" in tmp_samples["net_input"]:
-                src_token = utils.strip_pad(
-                    tmp_samples["net_input"]["src_tokens"][i, :], self.tgt_dict.pad()
-                )
-            else:
-                src_token = None
-
-            target_token = None
-            
-            if has_target:
-                target_token = (
-                    utils.strip_pad(tmp_samples["target"][i, :], self.tgt_dict.pad()).int().cpu()
-                )
-            
-            src_str = self.src_dict.string(src_token, None)
-            target_str = self.tgt_dict.string(
-                        target_token,
-                        None,
-                        escape_unk=True,
-                        extra_symbols_to_ignore=get_symbols_to_strip_from_output(translator),
-                    )
-            # Process top predictions
-            #prev_len_hypo = max_len_hypo
-            for j, hypo in enumerate(hypos[i][: 1]): # nbest = 1
-                hypo_token, hypo_str, alignment = utils.post_process_prediction(
-                    hypo_tokens=hypo["tokens"].int().cpu(),
-                    src_str=src_str,
-                    alignment=None,
-                    align_dict=None,
-                    tgt_dict=self.tgt_dict,
-                    remove_bpe=None,
-                    extra_symbols_to_ignore=get_symbols_to_strip_from_output(translator),
-                )
-                self.scorer.add(target_token, hypo_token)
-            # if hypo_token.shape[0] > prev_len_hypo:
-            #     max_len_hypo = hypo_token.shape[0]
-            
-            
-            tmp_hypo_tokens.append(hypo_token.cpu().tolist())
-        
-        
-        del tmp_samples
-        #np_target_tokens = padding_to_fixed_length(tmp_target_tokens,max_len_target,self.tgt_dict.pad())
-        np_hypo_tokens = numpy_padding_to_fixed_length(tmp_hypo_tokens,user_parameter['max_len_hypo'],self.tgt_dict.pad())
-        
-        #target_tokens = torch.Tensor(np_target_tokens).to(src_tokens.dtype).to(src_tokens.device)
-        hypo_tokens = torch.Tensor(np_hypo_tokens).to(src_tokens.dtype).to(src_tokens.device)        
-        
-        del tmp_target_tokens
-        del tmp_src_tokens
-        del tmp_hypo_tokens
-        del np_hypo_tokens
-        print(self.scorer.result_string())
-        
-        # print(src_str)
-        # print(target_str)
-        # print(hypo_str)
-        #true = utils.move_to_cuda(target_tokens)
-
-       
-        
-        disc_out = discriminator(target_tokens, hypo_tokens)
+        net_output = model(**sample["net_input"])       
         #-------------------------MLE----------------------
         model.train()
         loss, nll_loss = self.compute_loss(model, net_output, sample, reduce=reduce)
@@ -226,8 +225,20 @@ class LabelSmoothedCrossEntropyCriterion(FairseqCriterion):
             "nsentences": sample["target"].size(0),
             "sample_size": sample_size,
         }
+        # part II: train the discriminator
+        src_tokens, target_tokens, hypo_tokens = translate_from_sample(model,user_parameter,sample,self.scorer,self.src_dict,self.tgt_dict)
         
-            
+        train_discriminator(user_parameter,
+                            hypo_input = hypo_tokens,
+                            target_input=target_tokens,
+                            src_input=src_tokens,
+                            )
+           
+        del target_tokens
+        del src_tokens
+        del hypo_tokens
+        torch.cuda.empty_cache()
+        
         if self.report_accuracy:
             n_correct, total = self.compute_accuracy(model, net_output, sample)
             logging_output["n_correct"] = utils.item(n_correct.data)
