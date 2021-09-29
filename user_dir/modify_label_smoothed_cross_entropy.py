@@ -227,17 +227,21 @@ class LabelSmoothedCrossEntropyCriterion(FairseqCriterion):
         }
         # part II: train the discriminator
         src_tokens, target_tokens, hypo_tokens = translate_from_sample(model,user_parameter,sample,self.scorer,self.src_dict,self.tgt_dict)
+        output_parameter = {
+            "src_tokens": src_tokens,
+            "target_tokens": target_tokens,
+            "hypo_tokens": hypo_tokens,
+        }
+        # train_discriminator(user_parameter,
+        #                     hypo_input = hypo_tokens,
+        #                     target_input=target_tokens,
+        #                     src_input=src_tokens,
+        #                    )
         
-        train_discriminator(user_parameter,
-                            hypo_input = hypo_tokens,
-                            target_input=target_tokens,
-                            src_input=src_tokens,
-                            )
-           
-        del target_tokens
-        del src_tokens
-        del hypo_tokens
-        torch.cuda.empty_cache()
+        # del target_tokens
+        # del src_tokens
+        # del hypo_tokens
+        # torch.cuda.empty_cache()
         
         if self.report_accuracy:
             n_correct, total = self.compute_accuracy(model, net_output, sample)
