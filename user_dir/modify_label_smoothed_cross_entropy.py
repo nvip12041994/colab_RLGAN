@@ -61,39 +61,26 @@ def train_discriminator(user_parameter,hypo_input,src_input,target_input):
 
 def no_padding_translate_from_sample(network,user_parameter,sample,scorer,src_dict,tgt_dict):
     network.eval()        
-    tmp_samples = copy.deepcopy(sample)    
-    translator = user_parameter["translator"]
+      
+    translator = user_parameter["translator"]    
     
-    # tmp_target_tokens = tmp_samples['target']
-    # target_tokens = tensor_padding_to_fixed_length(tmp_target_tokens,user_parameter["max_len_target"],tgt_dict.pad())
-    # target_tokens = target_tokens.to(sample['target'].device)
-    
-    # tmp_src_tokens = tmp_samples['net_input']['src_tokens']               
-    # src_tokens = tensor_padding_to_fixed_length(tmp_src_tokens,user_parameter["max_len_src"],src_dict.pad())        
-    # src_tokens = src_tokens.to(sample['net_input']['src_tokens'].device)
-    
-    # print("padding src_tokens shape" + str(src_tokens.shape))
-    # print("padding target_tokens shape" + str(target_tokens.shape))
-    
-    # tmp_samples['target'] = target_tokens
-    # tmp_samples['net_input']['src_tokens'] = src_tokens
-    target_tokens  = tmp_samples['target']
-    src_tokens = tmp_samples['net_input']['src_tokens']
+    target_tokens  = sample['target']
+    src_tokens = sample['net_input']['src_tokens']
     
     with torch.no_grad():
-        hypos = translator.generate([network],sample = tmp_samples)
+        hypos = translator.generate([network],sample = sample)
     num_generated_tokens = sum(len(h[0]["tokens"]) for h in hypos)
     print(num_generated_tokens)
     tmp_hypo_tokens = []        
-    #max_len_hypo = 0
+    max_len_hypo = 0
     
-    for i, sample_id in enumerate(tmp_samples["id"].tolist()):
-        has_target = tmp_samples["target"] is not None
+    for i, sample_id in enumerate(sample["id"].tolist()):
+        has_target = sample["target"] is not None
 
         # Remove padding
-        if "src_tokens" in tmp_samples["net_input"]:
+        if "src_tokens" in sample["net_input"]:
             src_token = utils.strip_pad(
-                tmp_samples["net_input"]["src_tokens"][i, :], tgt_dict.pad()
+                sample["net_input"]["src_tokens"][i, :], tgt_dict.pad()
             )
         else:
             src_token = None
@@ -102,7 +89,7 @@ def no_padding_translate_from_sample(network,user_parameter,sample,scorer,src_di
         
         if has_target:
             target_token = (
-                utils.strip_pad(tmp_samples["target"][i, :], tgt_dict.pad()).int().cpu()
+                utils.strip_pad(sample["target"][i, :], tgt_dict.pad()).int().cpu()
             )
         
         src_str = src_dict.string(src_token, None)
@@ -113,7 +100,7 @@ def no_padding_translate_from_sample(network,user_parameter,sample,scorer,src_di
                     extra_symbols_to_ignore=get_symbols_to_strip_from_output(translator),
                 )
         # Process top predictions
-        #prev_len_hypo = max_len_hypo
+        prev_len_hypo = max_len_hypo
         for j, hypo in enumerate(hypos[i][: 1]): # nbest = 1
             hypo_token, hypo_str, alignment = utils.post_process_prediction(
                 hypo_tokens=hypo["tokens"].int().cpu(),
@@ -125,18 +112,17 @@ def no_padding_translate_from_sample(network,user_parameter,sample,scorer,src_di
                 extra_symbols_to_ignore=get_symbols_to_strip_from_output(translator),
             )
             scorer.add(target_token, hypo_token)
-        # if hypo_token.shape[0] > prev_len_hypo:
-        #     max_len_hypo = hypo_token.shape[0]       
+        if hypo_token.shape[0] > prev_len_hypo:
+            max_len_hypo = hypo_token.shape[0]       
         tmp_hypo_tokens.append(hypo_token.cpu().tolist())
     
-    #np_target_tokens = padding_to_fixed_length(tmp_target_tokens,max_len_target,self.tgt_dict.pad())
-    #np_hypo_tokens = numpy_padding_to_fixed_length(tmp_hypo_tokens,user_parameter['max_len_hypo'],tgt_dict.pad())
+    np_hypo_tokens = numpy_padding_to_fixed_length(tmp_hypo_tokens,user_parameter['max_len_hypo'],tgt_dict.pad())
     
     #target_tokens = torch.Tensor(np_target_tokens).to(src_tokens.dtype).to(src_tokens.device)
-    hypo_tokens = torch.Tensor(tmp_hypo_tokens).to(src_tokens.dtype).to(src_tokens.device)        
+    hypo_tokens = torch.Tensor(np_hypo_tokens).to(src_tokens.dtype).to(src_tokens.device)        
     
     del tmp_hypo_tokens
-    
+    del np_hypo_tokens
     torch.cuda.empty_cache()
     print(scorer.result_string())
     return src_tokens,target_tokens,hypo_tokens
