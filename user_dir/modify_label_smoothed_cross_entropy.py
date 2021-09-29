@@ -294,16 +294,16 @@ class LabelSmoothedCrossEntropyCriterion(FairseqCriterion):
             "nsentences": sample["target"].size(0),
             "sample_size": sample_size,
         }
-        # if user_parameter is not None:    
-        #     # part II: train the discriminator
-        #     no_padding_translate_from_sample
-        #     src_tokens, target_tokens, hypo_tokens = no_padding_translate_from_sample(model,user_parameter,sample,self.scorer,self.src_dict,self.tgt_dict)
-        #     #src_tokens, target_tokens, hypo_tokens = translate_from_sample(model,user_parameter,sample,self.scorer,self.src_dict,self.tgt_dict)
-        #     output_parameter = {
-        #         "src_tokens": src_tokens,
-        #         "target_tokens": target_tokens,
-        #         "hypo_tokens": hypo_tokens,
-        #     }
+        if user_parameter is not None:    
+            # part II: train the discriminator
+            no_padding_translate_from_sample
+            src_tokens, target_tokens, hypo_tokens = no_padding_translate_from_sample(model,user_parameter,sample,self.scorer,self.src_dict,self.tgt_dict)
+            #src_tokens, target_tokens, hypo_tokens = translate_from_sample(model,user_parameter,sample,self.scorer,self.src_dict,self.tgt_dict)
+            output_parameter = {
+                "src_tokens": src_tokens,
+                "target_tokens": target_tokens,
+                "hypo_tokens": hypo_tokens,
+            }
         # train_discriminator(user_parameter,
         #                     hypo_input = hypo_tokens,
         #                     target_input=target_tokens,

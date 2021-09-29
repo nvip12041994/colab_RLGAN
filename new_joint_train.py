@@ -146,8 +146,8 @@ def main(cfg: FairseqConfig) -> None:
     translator = SequenceGenerator(
         [model],
         task.tgt_dict,
-        # search_strategy = search.DiverseSiblingsSearch,
-        # diversity_rate =0.5,
+        search_strategy = search.Sampling(tgt_dict = task.tgt_dict,sampling_topk=-1, sampling_topp=0.95),
+        
         beam_size=1,
         max_len_a=1.2,
         max_len_b=10,
