@@ -13,9 +13,18 @@ from fairseq.dataclass import FairseqDataclass
 from omegaconf import II
 from fairseq.sequence_generator import SequenceGenerator
 from fairseq import scoring
-import numpy as np
 
-def padding_to_fixed_length(imput_list,max_len,pad):
+import numpy as np
+import torch.nn.functional as F
+import copy
+
+def tensor_padding_to_fixed_length(input_tensor,max_len,pad):
+    output_tensor = input_tensor.cpu()
+    p1d = (0,max_len - input_tensor.shape[1])
+    output_tensor = F.pad(input_tensor,p1d,"constant",pad)
+    return output_tensor
+
+def numpy_padding_to_fixed_length(imput_list,max_len,pad):
     tmp_list = []
     for item in imput_list:
         len_tmp = len(item)
@@ -105,28 +114,46 @@ class LabelSmoothedCrossEntropyCriterion(FairseqCriterion):
         3) logging outputs to display while training
         """
         
-        net_output = model(**sample["net_input"])       
+        net_output = model(**sample["net_input"])
+        
+        model.eval()
+        
+        tmp_samples = copy.deepcopy(sample)
         discriminator = user_parameter["discriminator"]
         translator = user_parameter["translator"]
         pg_criterion = user_parameter["pg_criterion"]
         d_criterion = user_parameter["d_criterion"]
-        print(type(discriminator))
-        print(type(translator))
-        model.eval()
+        
+        
+        tmp_target_tokens = tmp_samples['target']
+        target_tokens = tensor_padding_to_fixed_length(tmp_target_tokens,user_parameter["max_len_target"],self.tgt_dict.pad())
+        target_tokens = target_tokens.to(sample['target'].device)
+        
+        tmp_src_tokens = tmp_samples['net_input']['src_tokens']               
+        src_tokens = tensor_padding_to_fixed_length(tmp_src_tokens,user_parameter["max_len_src"],self.src_dict.pad())        
+        src_tokens = src_tokens.to(sample['net_input']['src_tokens'].device)
+        
+        # print("padding src_tokens shape" + str(src_tokens.shape))
+        # print("padding target_tokens shape" + str(target_tokens.shape))
+        
+        tmp_samples['target'] = target_tokens
+        tmp_samples['net_input']['src_tokens'] = src_tokens
+        
+        
         with torch.no_grad():
-            hypos = translator.generate([model],sample = sample)
+            hypos = translator.generate([model],sample = tmp_samples)
         #num_generated_tokens = sum(len(h[0]["tokens"]) for h in hypos)
         
         tmp_hypo_tokens = []        
-        max_len_hypo = 0
+        #max_len_hypo = 0
         
-        for i, sample_id in enumerate(sample["id"].tolist()):
-            has_target = sample["target"] is not None
+        for i, sample_id in enumerate(tmp_samples["id"].tolist()):
+            has_target = tmp_samples["target"] is not None
 
             # Remove padding
-            if "src_tokens" in sample["net_input"]:
+            if "src_tokens" in tmp_samples["net_input"]:
                 src_token = utils.strip_pad(
-                    sample["net_input"]["src_tokens"][i, :], self.tgt_dict.pad()
+                    tmp_samples["net_input"]["src_tokens"][i, :], self.tgt_dict.pad()
                 )
             else:
                 src_token = None
@@ -135,7 +162,7 @@ class LabelSmoothedCrossEntropyCriterion(FairseqCriterion):
             
             if has_target:
                 target_token = (
-                    utils.strip_pad(sample["target"][i, :], self.tgt_dict.pad()).int().cpu()
+                    utils.strip_pad(tmp_samples["target"][i, :], self.tgt_dict.pad()).int().cpu()
                 )
             
             src_str = self.src_dict.string(src_token, None)
@@ -146,7 +173,7 @@ class LabelSmoothedCrossEntropyCriterion(FairseqCriterion):
                         extra_symbols_to_ignore=get_symbols_to_strip_from_output(translator),
                     )
             # Process top predictions
-            prev_len_hypo = max_len_hypo
+            #prev_len_hypo = max_len_hypo
             for j, hypo in enumerate(hypos[i][: 1]): # nbest = 1
                 hypo_token, hypo_str, alignment = utils.post_process_prediction(
                     hypo_tokens=hypo["tokens"].int().cpu(),
@@ -158,23 +185,24 @@ class LabelSmoothedCrossEntropyCriterion(FairseqCriterion):
                     extra_symbols_to_ignore=get_symbols_to_strip_from_output(translator),
                 )
                 self.scorer.add(target_token, hypo_token)
-            if hypo_token.shape[0] > prev_len_hypo:
-                max_len_hypo = hypo_token.shape[0]
+            # if hypo_token.shape[0] > prev_len_hypo:
+            #     max_len_hypo = hypo_token.shape[0]
             
             
             tmp_hypo_tokens.append(hypo_token.cpu().tolist())
-            
         
+        
+        del tmp_samples
         #np_target_tokens = padding_to_fixed_length(tmp_target_tokens,max_len_target,self.tgt_dict.pad())
-        np_hypo_tokens = padding_to_fixed_length(tmp_hypo_tokens,max_len_hypo,self.tgt_dict.pad())
-        test = sample['target']
-        src_tokens = sample['net_input']['src_tokens']
+        np_hypo_tokens = numpy_padding_to_fixed_length(tmp_hypo_tokens,user_parameter['max_len_hypo'],self.tgt_dict.pad())
+        
         #target_tokens = torch.Tensor(np_target_tokens).to(src_tokens.dtype).to(src_tokens.device)
-        hypo_tokens = torch.Tensor(np_hypo_tokens).to(src_tokens.dtype).to(src_tokens.device)
+        hypo_tokens = torch.Tensor(np_hypo_tokens).to(src_tokens.dtype).to(src_tokens.device)        
         
-        print("src_tokens shape" + str(src_tokens.shape))
-        
+        del tmp_target_tokens
+        del tmp_src_tokens
         del tmp_hypo_tokens
+        del np_hypo_tokens
         print(self.scorer.result_string())
         
         # print(src_str)

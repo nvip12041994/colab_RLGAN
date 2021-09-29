@@ -42,7 +42,7 @@ class Discriminator(nn.Module):
 
         self.classifier = nn.Sequential(
             nn.Dropout(),
-            Linear(17920, 20),
+            Linear(70*96*256, 20),
             nn.ReLU(),
             nn.Dropout(),
             Linear(20, 20),

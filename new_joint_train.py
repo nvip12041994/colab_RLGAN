@@ -11,6 +11,7 @@ import os
 import sys
 from typing import Dict, Optional, Any, List, Tuple, Callable
 
+import math
 import numpy as np
 import torch
 from fairseq import (
@@ -140,6 +141,8 @@ def main(cfg: FairseqConfig) -> None:
         [model],
         task.tgt_dict,
         beam_size=1,
+        max_len_a=1.2,
+        max_len_b=10,
     )
 
     if use_cuda:
@@ -262,13 +265,15 @@ def train(
     
     max_len_src = epoch_itr.dataset.src.sizes.max()
     max_len_target = epoch_itr.dataset.tgt.sizes.max()
+    max_len_hypo = math.ceil(max_len_src*translator.max_len_a) + translator.max_len_b
     user_parameter = {
         "max_len_src": max_len_src,
         "max_len_target": max_len_target,
         "discriminator": discriminator, 
         "translator": translator, 
         "pg_criterion": pg_criterion, 
-        "d_criterion": d_criterion, 
+        "d_criterion": d_criterion,
+        "max_len_hypo": max_len_hypo,
     }
     
     # Initialize data iterator
@@ -324,14 +329,6 @@ def train(
             "train_step-%d" % i
         ):
             log_output = trainer.train_step(samples, user_parameter)
-            # print("--------------------START DEBUG---------------------------------")
-            # print("SAMPLE")
-            # print(samples)
-            # print("----------------------------------------------------------------")
-            # print("LOG_OUTPUT")
-            # print(log_output)
-            # print("--------------------END DEBUG----------------------------------")
-        if log_output is not None:  # not OOM, overflow, ...
             # log mid-epoch stats
             num_updates = trainer.get_num_updates()
             if num_updates % cfg.common.log_interval == 0:
@@ -532,7 +529,7 @@ def cli_main(
                         '--optimizer', 'adam', '--adam-betas', '(0.9, 0.98)', 
                         '--lr', '0.0005', '--clip-norm', '0.0',   
                         '--label-smoothing', '0.1', '--seed', '2048',
-                        '--max-tokens', '1000',
+                        '--max-tokens', '50',
                         '--max-epoch', '33',
                         '--lr-scheduler', 'inverse_sqrt',
                         '--weight-decay', '0.0',
