@@ -146,7 +146,7 @@ def main(cfg: FairseqConfig) -> None:
     translator = SequenceGenerator(
         [model],
         task.tgt_dict,
-        search_strategy = search.Sampling(tgt_dict = task.tgt_dict,sampling_topk=640, sampling_topp=-1),
+        search_strategy = search.Sampling(tgt_dict = task.tgt_dict,sampling_topk=-1, sampling_topp=0.95),
         
         beam_size=1,
         max_len_a=1.2,
@@ -545,7 +545,7 @@ def cli_main(
                         '--lr', '0.0005', '--clip-norm', '0.0',   
                         '--label-smoothing', '0.1', '--seed', '2048',
                         '--max-tokens', '5000',
-                        '--max-epoch', '25',
+                        '--max-epoch', '26',
                         '--lr-scheduler', 'inverse_sqrt',
                         '--weight-decay', '0.0',
                         '--user-dir', './user_dir',   
