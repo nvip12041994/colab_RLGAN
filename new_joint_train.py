@@ -545,7 +545,7 @@ def cli_main(
                         '--lr', '0.0005', '--clip-norm', '0.0',   
                         '--label-smoothing', '0.1', '--seed', '2048',
                         '--max-tokens', '5000',
-                        '--max-epoch', '22',
+                        '--max-epoch', '23',
                         '--lr-scheduler', 'inverse_sqrt',
                         '--weight-decay', '0.0',
                         '--user-dir', './user_dir',   
