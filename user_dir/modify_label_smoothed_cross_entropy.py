@@ -112,17 +112,18 @@ def no_padding_translate_from_sample(network,user_parameter,sample,scorer,src_di
                 extra_symbols_to_ignore=get_symbols_to_strip_from_output(translator),
             )
             scorer.add(target_token, hypo_token)
-        if hypo_token.shape[0] > prev_len_hypo:
-            max_len_hypo = hypo_token.shape[0]       
-        tmp_hypo_tokens.append(hypo_token.cpu().tolist())
+    #     if hypo_token.shape[0] > prev_len_hypo:
+    #         max_len_hypo = hypo_token.shape[0]       
+    #     tmp_hypo_tokens.append(hypo_token.cpu().tolist())
     
-    np_hypo_tokens = numpy_padding_to_fixed_length(tmp_hypo_tokens,user_parameter['max_len_hypo'],tgt_dict.pad())
+    # np_hypo_tokens = numpy_padding_to_fixed_length(tmp_hypo_tokens,user_parameter['max_len_hypo'],tgt_dict.pad())
     
     #target_tokens = torch.Tensor(np_target_tokens).to(src_tokens.dtype).to(src_tokens.device)
-    hypo_tokens = torch.Tensor(np_hypo_tokens).to(src_tokens.dtype).to(src_tokens.device)        
-    
+    # hypo_tokens = torch.Tensor(np_hypo_tokens).to(src_tokens.dtype).to(src_tokens.device)
+    hypo_tokens = 0   
+    #test = hypos[:][: 1]
     del tmp_hypo_tokens
-    del np_hypo_tokens
+    # del np_hypo_tokens
     torch.cuda.empty_cache()
     print(scorer.result_string())
     return src_tokens,target_tokens,hypo_tokens
