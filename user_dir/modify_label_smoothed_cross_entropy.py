@@ -49,9 +49,10 @@ def get_symbols_to_strip_from_output(generator):
 
 def train_discriminator(user_parameter,hypo_input,src_input,target_input):
     user_parameter["discriminator"].train()
+    user_parameter["d_criterion"].train()
     fake_labels = Variable(torch.zeros(src_input.size(0)).float())
     fake_labels = fake_labels.to(src_input.device)
-        
+    
     disc_out = user_parameter["discriminator"](src_input, hypo_input)
     d_loss = user_parameter["d_criterion"](disc_out.squeeze(1), fake_labels)
     acc = torch.sum(torch.round(disc_out).squeeze(1) == fake_labels).float() / len(fake_labels)
@@ -299,20 +300,16 @@ class LabelSmoothedCrossEntropyCriterion(FairseqCriterion):
             "nsentences": sample["target"].size(0),
             "sample_size": sample_size,
         }
-        # if user_parameter is not None:    
-        #     # part II: train the discriminator            
-        #     #src_tokens, target_tokens, hypo_tokens = no_padding_translate_from_sample(model,user_parameter,sample,self.scorer,self.src_dict,self.tgt_dict)
-        #     src_tokens, target_tokens, hypo_tokens = translate_from_sample(model,user_parameter,sample,self.scorer,self.src_dict,self.tgt_dict)
-        #     output_parameter = {
-        #         "src_tokens": src_tokens,
-        #         "target_tokens": target_tokens,
-        #         "hypo_tokens": hypo_tokens,
-        #     }
-        # train_discriminator(user_parameter,
-        #                     hypo_input = hypo_tokens,
-        #                     target_input=target_tokens,
-        #                     src_input=src_tokens,
-        #                    )
+        if user_parameter is not None:    
+            # part II: train the discriminator            
+            #src_tokens, target_tokens, hypo_tokens = no_padding_translate_from_sample(model,user_parameter,sample,self.scorer,self.src_dict,self.tgt_dict)
+            src_tokens, target_tokens, hypo_tokens = translate_from_sample(model,user_parameter,sample,self.scorer,self.src_dict,self.tgt_dict)          
+            
+            train_discriminator(user_parameter,
+                                hypo_input = hypo_tokens,
+                                target_input=target_tokens,
+                                src_input=src_tokens,
+                            )
         
         # del target_tokens
         # del src_tokens
