@@ -41,6 +41,17 @@ from discriminator import Discriminator
 #from train_discriminator import train_d
 from PGLoss import PGLoss
 
+import subprocess
+
+def get_gpu_memory_map():   
+    result = subprocess.check_output(
+        [
+            'nvidia-smi', '--query-gpu=memory.used',
+            '--format=csv,nounits,noheader'
+        ])
+    
+    return float(result)
+
 logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
@@ -332,18 +343,12 @@ def train(
     should_stop = False
     num_updates = trainer.get_num_updates()
     logger.info("Start iterating over samples")
-    for i, samples in enumerate(progress):
-        print(i)        
+    for i, samples in enumerate(progress):     
         with metrics.aggregate("train_inner"), torch.autograd.profiler.record_function(
             "train_step-%d" % i
         ):
             log_output = trainer.train_step(samples, user_parameter)
-            # t = torch.cuda.get_device_properties(0).total_memory
-            # r = torch.cuda.memory_reserved(0)
-            # a = torch.cuda.memory_allocated(0)
-            # f = (r-a)/ 1024 / 1024 / 1024  # free inside reserved
-            # print("GPU memory occupied by tensors {:.3f} GB".format(a/ 1024 / 1024 / 1024))
-            # print("free {:.3f} GB".format(f))
+            print("After batch {0} GPU memory used {1:.3f}".format(i,get_gpu_memory_map()))
             # log mid-epoch stats
             num_updates = trainer.get_num_updates()
             if num_updates % cfg.common.log_interval == 0:
@@ -545,7 +550,7 @@ def cli_main(
                         '--lr', '0.0005', '--clip-norm', '0.0',   
                         '--label-smoothing', '0.1', '--seed', '2048',
                         '--max-tokens', '5000',
-                        '--max-epoch', '26',
+                        '--max-epoch', '33',
                         '--lr-scheduler', 'inverse_sqrt',
                         '--weight-decay', '0.0',
                         '--user-dir', './user_dir',   

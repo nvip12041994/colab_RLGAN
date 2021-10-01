@@ -19,6 +19,7 @@ import torch.nn.functional as F
 import copy
 from torch.autograd import Variable
 
+
 def tensor_padding_to_fixed_length(input_tensor,max_len,pad):
     output_tensor = input_tensor.cpu()
     p1d = (0,max_len - input_tensor.shape[1])
@@ -58,6 +59,9 @@ def train_discriminator(user_parameter,hypo_input,src_input,target_input):
     user_parameter["d_optimizer"].zero_grad()
     d_loss.backward()
     user_parameter["d_optimizer"].step()
+    del d_loss
+    torch.cuda.empty_cache()
+    
 
 def no_padding_translate_from_sample(network,user_parameter,sample,scorer,src_dict,tgt_dict):
     network.eval()        
@@ -295,20 +299,20 @@ class LabelSmoothedCrossEntropyCriterion(FairseqCriterion):
             "nsentences": sample["target"].size(0),
             "sample_size": sample_size,
         }
-        if user_parameter is not None:    
-            # part II: train the discriminator            
-            #src_tokens, target_tokens, hypo_tokens = no_padding_translate_from_sample(model,user_parameter,sample,self.scorer,self.src_dict,self.tgt_dict)
-            src_tokens, target_tokens, hypo_tokens = translate_from_sample(model,user_parameter,sample,self.scorer,self.src_dict,self.tgt_dict)
-            output_parameter = {
-                "src_tokens": src_tokens,
-                "target_tokens": target_tokens,
-                "hypo_tokens": hypo_tokens,
-            }
-        train_discriminator(user_parameter,
-                            hypo_input = hypo_tokens,
-                            target_input=target_tokens,
-                            src_input=src_tokens,
-                           )
+        # if user_parameter is not None:    
+        #     # part II: train the discriminator            
+        #     #src_tokens, target_tokens, hypo_tokens = no_padding_translate_from_sample(model,user_parameter,sample,self.scorer,self.src_dict,self.tgt_dict)
+        #     src_tokens, target_tokens, hypo_tokens = translate_from_sample(model,user_parameter,sample,self.scorer,self.src_dict,self.tgt_dict)
+        #     output_parameter = {
+        #         "src_tokens": src_tokens,
+        #         "target_tokens": target_tokens,
+        #         "hypo_tokens": hypo_tokens,
+        #     }
+        # train_discriminator(user_parameter,
+        #                     hypo_input = hypo_tokens,
+        #                     target_input=target_tokens,
+        #                     src_input=src_tokens,
+        #                    )
         
         # del target_tokens
         # del src_tokens
