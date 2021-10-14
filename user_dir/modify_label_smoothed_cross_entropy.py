@@ -131,6 +131,7 @@ def no_padding_translate_from_sample(network,user_parameter,sample,scorer,src_di
     # del np_hypo_tokens
     torch.cuda.empty_cache()
     print(scorer.result_string())
+    print(scorer.score())
     return src_tokens,target_tokens,hypo_tokens
 
 
@@ -215,6 +216,7 @@ def translate_from_sample(network,user_parameter,sample,scorer,src_dict,tgt_dict
     del np_hypo_tokens
     torch.cuda.empty_cache()
     print(scorer.result_string())
+    print(scorer.score())
     return src_tokens,target_tokens,hypo_tokens
 
 @dataclass
@@ -305,11 +307,11 @@ class LabelSmoothedCrossEntropyCriterion(FairseqCriterion):
             #src_tokens, target_tokens, hypo_tokens = no_padding_translate_from_sample(model,user_parameter,sample,self.scorer,self.src_dict,self.tgt_dict)
             src_tokens, target_tokens, hypo_tokens = translate_from_sample(model,user_parameter,sample,self.scorer,self.src_dict,self.tgt_dict)          
             
-            train_discriminator(user_parameter,
-                                hypo_input = hypo_tokens,
-                                target_input=target_tokens,
-                                src_input=src_tokens,
-                            )
+            # train_discriminator(user_parameter,
+            #                     hypo_input = hypo_tokens,
+            #                     target_input=target_tokens,
+            #                     src_input=src_tokens,
+            #                 )
         
         # del target_tokens
         # del src_tokens
