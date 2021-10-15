@@ -348,7 +348,7 @@ def train(
             "train_step-%d" % i
         ):
             log_output = trainer.train_step(samples, user_parameter)
-            print("After batch {0} GPU memory used {1:.3f}".format(i,get_gpu_memory_map()))
+            #print("After batch {0} GPU memory used {1:.3f}".format(i,get_gpu_memory_map()))
             # log mid-epoch stats
             num_updates = trainer.get_num_updates()
             if num_updates % cfg.common.log_interval == 0:
