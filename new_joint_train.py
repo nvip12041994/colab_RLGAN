@@ -46,7 +46,7 @@ import subprocess
 def get_gpu_memory_map():   
     result = subprocess.check_output(
         [
-            './bin/nvidia-smi', '--query-gpu=memory.used',
+            '/bin/nvidia-smi', '--query-gpu=memory.used',
             '--format=csv,nounits,noheader'
         ])
     
