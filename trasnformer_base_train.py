@@ -481,7 +481,7 @@ def cli_main(
                         '--eval-bleu',
                         '--eval-bleu-args', '{"beam": 5, "max_len_a": 1.2, "max_len_b": 10}',
                         '--eval-bleu-remove-bpe',
-                        '--eval-bleu-detok', 'subword_nmt',
+                        '--eval-bleu-detok', 'moses',
                         '--best-checkpoint-metric', 'bleu',
                         '--maximize-best-checkpoint-metric',
                         '--restore-file', 'checkpoints/transformer/checkpoint_best.pt',
