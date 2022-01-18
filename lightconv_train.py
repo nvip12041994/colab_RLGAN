@@ -479,6 +479,7 @@ def cli_main(
                         
                         '--max-update', '800000', '--warmup-updates', '4000', '--warmup-init-lr' ,'1e-07',
                         '--bpe','subword_nmt',
+                        '--no-epoch-checkpoints',
                         '--eval-bleu',
                         '--eval-bleu-args', '{"beam": 5, "max_len_a": 1.2, "max_len_b": 10}',
                         '--eval-bleu-remove-bpe',

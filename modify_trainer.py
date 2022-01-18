@@ -611,7 +611,7 @@ class Trainer(object):
     @metrics.aggregate("train")
     def train_step(self, samples, user_parameter = None, raise_oom=False):
         """Do forward, backward and parameter update."""
-        print("--------------------START DEBUG---------------------------------")
+        #print("--------------------START DEBUG---------------------------------")
         self._set_seed()
         self.model.train()
         self.criterion.train()
@@ -874,7 +874,7 @@ class Trainer(object):
 
         metrics.log_stop_time("train_wall")        
         
-        print("--------------------END DEBUG----------------------------------")
+        #print("--------------------END DEBUG----------------------------------")
         return logging_output
 
     @metrics.aggregate("valid")

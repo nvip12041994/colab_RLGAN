@@ -37,7 +37,7 @@ import torch
 from torch.autograd import Variable
 from fairseq import search
 
-from discriminator import Discriminator
+from discriminator_lightconv import Discriminator_lightconv
 #from train_discriminator import train_d
 from PGLoss import PGLoss
 
@@ -127,7 +127,7 @@ def main(cfg: FairseqConfig) -> None:
     # )
     print("Generator loaded successfully!")
     use_cuda = (torch.cuda.device_count() >= 1)
-    discriminator = Discriminator(cfg, task.src_dict, task.tgt_dict, use_cuda=use_cuda)
+    discriminator = Discriminator_lightconv(cfg, task, kernel_size=3)
     if use_cuda:
         discriminator.cuda()
     else:
@@ -548,14 +548,15 @@ def cli_main(
                         '--reset-optimizer',
                         '--lr', '0.0005', '--clip-norm', '0.0',   
                         '--label-smoothing', '0.1', '--seed', '2048',
-                        '--max-tokens', '50',
+                        '--max-tokens', '120',
+                        #'--batch-size', '10',
                         '--max-epoch', '33',
                         '--lr-scheduler', 'inverse_sqrt',
                         '--weight-decay', '0.0',
                         '--user-dir', './user_dir',   
                         '--criterion', 'modify_label_smoothed_cross_entropy',
                         '--max-update', '800000', '--warmup-updates', '4000', '--warmup-init-lr' ,'1e-07',
-                        '--no-progress-bar',
+                        #'--no-progress-bar',
                         '--bpe','subword_nmt',
                         '--eval-bleu',
                         '--eval-bleu-args', '{"beam": 5, "max_len_a": 1.2, "max_len_b": 10}',

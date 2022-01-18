@@ -305,8 +305,6 @@ class LightConvModel(FairseqEncoderDecoderModel):
         encoder = LightConvEncoder(args, src_dict, encoder_embed_tokens)
         decoder = LightConvDecoder(args, tgt_dict, decoder_embed_tokens)
         return LightConvModel(encoder, decoder)
-
-
 class LightConvEncoder(FairseqEncoder):
     """
     LightConv encoder consisting of *args.encoder_layers* layers. Each layer

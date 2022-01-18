@@ -22,9 +22,9 @@ from torch.autograd import Variable
 
 def tensor_padding_to_fixed_length(input_tensor,max_len,pad):
     output_tensor = input_tensor.cpu()
-    p1d = (0,max_len - input_tensor.shape[1])
+    p1d = (0,max_len - input_tensor.shape[0])
     output_tensor = F.pad(input_tensor,p1d,"constant",pad)
-    return output_tensor
+    return output_tensor.cuda()
 
 def numpy_padding_to_fixed_length(imput_list,max_len,pad):
     tmp_list = []
@@ -56,13 +56,83 @@ def train_discriminator(user_parameter,hypo_input,src_input,target_input):
     disc_out = user_parameter["discriminator"](src_input, hypo_input)
     d_loss = user_parameter["d_criterion"](disc_out.squeeze(1), fake_labels)
     acc = torch.sum(torch.round(disc_out).squeeze(1) == fake_labels).float() / len(fake_labels)
-    print("Discriminator accuracy {:.3f}".format(acc))
+    #print("Discriminator accuracy {:.3f}".format(acc))
     user_parameter["d_optimizer"].zero_grad()
     d_loss.backward()
     user_parameter["d_optimizer"].step()
     del d_loss
     torch.cuda.empty_cache()
     
+def get_token_translate_from_sample(network,user_parameter,sample,scorer,src_dict,tgt_dict):
+    network.eval()        
+      
+    translator = user_parameter["translator"]    
+    
+    target_tokens  = sample['target']
+    src_tokens = sample['net_input']['src_tokens']
+    
+    with torch.no_grad():
+        hypos = translator.generate([network],sample = sample)
+       
+    
+    for i, sample_id in enumerate(sample["id"].tolist()):
+        #print("==================")
+        has_target = sample["target"] is not None
+
+        # Remove padding
+        if "src_tokens" in sample["net_input"]:
+            src_token = utils.strip_pad(
+                sample["net_input"]["src_tokens"][i, :], tgt_dict.pad()
+            )
+        else:
+            src_token = None
+
+        target_token = None
+        
+        if has_target:
+            target_token = (
+                utils.strip_pad(sample["target"][i, :], tgt_dict.pad()).int().cpu()
+            )
+        
+        src_str = src_dict.string(src_token, None)
+        target_str = tgt_dict.string(
+                    target_token,
+                    None,
+                    escape_unk=True,
+                    extra_symbols_to_ignore=get_symbols_to_strip_from_output(translator),
+                )
+        # Process top predictions
+        
+        for j, hypo in enumerate(hypos[i][: 1]): # nbest = 1            
+            hypo_token, hypo_str, alignment = utils.post_process_prediction(
+                hypo_tokens=hypo["tokens"].int().cpu(),
+                src_str=src_str,
+                alignment=None,
+                align_dict=None,
+                tgt_dict=tgt_dict,
+                remove_bpe=None,
+                extra_symbols_to_ignore=get_symbols_to_strip_from_output(translator),
+            )            
+            scorer.add(target_token, hypo_token)
+        # print(src_str)
+        # print("++++++++++++++++++++++")
+        # print(target_str)
+        # print("++++++++++++++++++++++")
+        # print(hypo_str)
+    tmp = []
+    for i in range(len(hypos)):
+        tmp.append(hypos[i][0]["tokens"]) # nbest = 1 so only one translate
+    
+    max_len = FindMaxLength(tmp)
+    hypo_tokens_out = torch.empty(size=(len(tmp),max_len), dtype=torch.int64,device = 'cuda')
+    for i in range(len(tmp)):
+        hypo_tokens_out[i]= tensor_padding_to_fixed_length(tmp[i],max_len,tgt_dict.pad())
+        
+    torch.cuda.empty_cache()
+    #print(scorer.result_string())
+    #print(scorer.score())
+    return src_tokens,target_tokens,hypo_tokens_out
+
 
 def no_padding_translate_from_sample(network,user_parameter,sample,scorer,src_dict,tgt_dict):
     network.eval()        
@@ -215,8 +285,8 @@ def translate_from_sample(network,user_parameter,sample,scorer,src_dict,tgt_dict
     del tmp_hypo_tokens
     del np_hypo_tokens
     torch.cuda.empty_cache()
-    print(scorer.result_string())
-    print(scorer.score())
+    #print(scorer.result_string())
+    #print(scorer.score())
     return src_tokens,target_tokens,hypo_tokens
 
 @dataclass
@@ -305,18 +375,18 @@ class LabelSmoothedCrossEntropyCriterion(FairseqCriterion):
         if user_parameter is not None:    
             # part II: train the discriminator            
             #src_tokens, target_tokens, hypo_tokens = no_padding_translate_from_sample(model,user_parameter,sample,self.scorer,self.src_dict,self.tgt_dict)
-            src_tokens, target_tokens, hypo_tokens = translate_from_sample(model,user_parameter,sample,self.scorer,self.src_dict,self.tgt_dict)          
-            
-            # train_discriminator(user_parameter,
-            #                     hypo_input = hypo_tokens,
-            #                     target_input=target_tokens,
-            #                     src_input=src_tokens,
-            #                 )
-        
-        # del target_tokens
-        # del src_tokens
-        # del hypo_tokens
-        # torch.cuda.empty_cache()
+            # src_tokens, target_tokens, hypo_tokens = translate_from_sample(model,user_parameter,sample,self.scorer,self.src_dict,self.tgt_dict)          
+            src_tokens, target_tokens, hypo_tokens = get_token_translate_from_sample(model,user_parameter,sample,self.scorer,self.src_dict,self.tgt_dict)
+            train_discriminator(user_parameter,
+                                hypo_input = hypo_tokens,
+                                target_input = target_tokens,
+                                src_input = src_tokens,
+                            )
+
+        del target_tokens
+        del src_tokens
+        del hypo_tokens
+        torch.cuda.empty_cache()
         
         if self.report_accuracy:
             n_correct, total = self.compute_accuracy(model, net_output, sample)

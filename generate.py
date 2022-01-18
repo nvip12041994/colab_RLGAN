@@ -399,7 +399,7 @@ def _main(cfg: DictConfig, output_file):
 
 def cli_main():
     parser = options.get_generation_parser()
-    cur_model = ['./data-bin/iwslt15.tokenized.en-vi', '--max-sentences', '50', '--path', 'checkpoints/transformer/checkpoint_best.pt','--bpe', 'subword_nmt', '--bpe-codes', 'bpe_code', '--sacrebleu']
+    cur_model = ['./data-bin/iwslt15.tokenized.en-vi','--beam','10', '--max-sentences', '200', '--path', 'checkpoints/transformer/checkpoint_best.pt','--bpe', 'subword_nmt', '--bpe-codes', 'bpe_code', '--sacrebleu']
     args = options.parse_args_and_arch(parser, input_args = cur_model)
     main(args)
 
