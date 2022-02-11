@@ -131,3 +131,5 @@ dmypy.json
 **/checkpoints
 **/.tabnine.model
 **/.vscode
+**/fairseq/modules/lightconv_layer
+**/fairseq/modules/dynamicconv_layer

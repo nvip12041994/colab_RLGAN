@@ -127,14 +127,6 @@ class Discriminator_lightconv(nn.Module):
         
         self.conv_thought_space = nn.Sequential(
             Conv2d(in_channels=2,
-                   out_channels=256,
-                   kernel_size=3,
-                   stride=1,
-                   padding=1),
-            nn.BatchNorm2d(256),
-            nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2, stride=2),
-            Conv2d(in_channels=256,
                    out_channels=128,
                    kernel_size=3,
                    stride=1,
@@ -170,7 +162,7 @@ class Discriminator_lightconv(nn.Module):
        
         self.classifier = nn.Sequential(
             nn.Dropout(),
-            Linear(1024, 20),
+            Linear(6144, 20),
             nn.ReLU(),
             nn.Dropout(),
             Linear(20, 20),
@@ -244,12 +236,12 @@ class Discriminator_lightconv(nn.Module):
             src = layer(src, encoder_padding_mask)
             tgt = layer(tgt, encoder_padding_mask)
         #torch.Size([56, 3, 512])
+
         src = src.permute(1,2,0)
         tgt = tgt.permute(1,2,0)
         src,tgt = pad_to_same_size(src,tgt)
-        src,tgt = fixed_padding(src,tgt,150)
+        src,tgt = fixed_padding(src,tgt,200)
         stack_matrix = stack_matrix_interleave(src,tgt,dim_stack=0)
-        stack_matrix.cuda()
         stack_matrix = stack_matrix.to(device='cuda')
         out = self.conv_thought_space(stack_matrix)
         out = out.contiguous().view(batch_size, -1)

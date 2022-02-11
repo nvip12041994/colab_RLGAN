@@ -5,7 +5,7 @@
 
 import math
 from dataclasses import dataclass, field
-
+import os
 import torch
 from fairseq import metrics, utils
 from fairseq.criterions import FairseqCriterion, register_criterion
@@ -60,9 +60,11 @@ def train_discriminator(user_parameter,hypo_input,src_input,target_input):
     user_parameter["d_optimizer"].zero_grad()
     d_loss.backward()
     user_parameter["d_optimizer"].step()
-    del d_loss
     torch.cuda.empty_cache()
+
+
     
+
 def get_token_translate_from_sample(network,user_parameter,sample,scorer,src_dict,tgt_dict):
     network.eval()        
       
@@ -95,12 +97,12 @@ def get_token_translate_from_sample(network,user_parameter,sample,scorer,src_dic
             )
         
         src_str = src_dict.string(src_token, None)
-        target_str = tgt_dict.string(
-                    target_token,
-                    None,
-                    escape_unk=True,
-                    extra_symbols_to_ignore=get_symbols_to_strip_from_output(translator),
-                )
+        # target_str = tgt_dict.string(
+        #             target_token,
+        #             None,
+        #             escape_unk=True,
+        #             extra_symbols_to_ignore=get_symbols_to_strip_from_output(translator),
+        #         )
         # Process top predictions
         
         for j, hypo in enumerate(hypos[i][: 1]): # nbest = 1            
@@ -114,11 +116,7 @@ def get_token_translate_from_sample(network,user_parameter,sample,scorer,src_dic
                 extra_symbols_to_ignore=get_symbols_to_strip_from_output(translator),
             )            
             scorer.add(target_token, hypo_token)
-        # print(src_str)
-        # print("++++++++++++++++++++++")
-        # print(target_str)
-        # print("++++++++++++++++++++++")
-        # print(hypo_str)
+
     tmp = []
     for i in range(len(hypos)):
         tmp.append(hypos[i][0]["tokens"]) # nbest = 1 so only one translate
@@ -361,7 +359,14 @@ class LabelSmoothedCrossEntropyCriterion(FairseqCriterion):
         net_output = model(**sample["net_input"])       
         #-------------------------MLE----------------------
         model.train()
-        loss, nll_loss = self.compute_loss(model, net_output, sample, reduce=reduce)
+        
+        real_random_number = int.from_bytes(os.urandom(1), byteorder="big")
+        if real_random_number > 127:
+            # MLE training
+            loss, nll_loss = self.compute_loss(model, net_output, sample, reduce=reduce)
+        else:
+            # Policy gradient training
+            loss, nll_loss = self.compute_loss(model, net_output, sample, reduce=reduce)
         sample_size = (
             sample["target"].size(0) if self.sentence_avg else sample["ntokens"]
         )
@@ -372,21 +377,19 @@ class LabelSmoothedCrossEntropyCriterion(FairseqCriterion):
             "nsentences": sample["target"].size(0),
             "sample_size": sample_size,
         }
-        if user_parameter is not None:    
+        #if user_parameter is not None:    
+        if False:
             # part II: train the discriminator            
-            #src_tokens, target_tokens, hypo_tokens = no_padding_translate_from_sample(model,user_parameter,sample,self.scorer,self.src_dict,self.tgt_dict)
-            # src_tokens, target_tokens, hypo_tokens = translate_from_sample(model,user_parameter,sample,self.scorer,self.src_dict,self.tgt_dict)          
             src_tokens, target_tokens, hypo_tokens = get_token_translate_from_sample(model,user_parameter,sample,self.scorer,self.src_dict,self.tgt_dict)
             train_discriminator(user_parameter,
                                 hypo_input = hypo_tokens,
                                 target_input = target_tokens,
                                 src_input = src_tokens,
                             )
-
-        del target_tokens
-        del src_tokens
-        del hypo_tokens
-        torch.cuda.empty_cache()
+            del target_tokens
+            del src_tokens
+            del hypo_tokens
+            torch.cuda.empty_cache()
         
         if self.report_accuracy:
             n_correct, total = self.compute_accuracy(model, net_output, sample)

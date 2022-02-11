@@ -149,7 +149,7 @@ def main(cfg: FairseqConfig) -> None:
     
     d_criterion = torch.nn.BCELoss()
     print("Discriminator criterion loaded successfully!")
-    pg_criterion = PGLoss(ignore_index=task.tgt_dict.pad(), size_average=True,reduce=True)
+    pg_criterion = PGLoss(ignore_index=task.tgt_dict.pad(), size_average=False,reduce=True)
 
     print("Policy gradient criterion loaded successfully!")
     # Initialize generator
@@ -218,7 +218,9 @@ def main(cfg: FairseqConfig) -> None:
             break
 
         # train for one epoch
-        valid_losses, should_stop = train(cfg, trainer, task, epoch_itr, discriminator, translator, pg_criterion, d_criterion,d_optimizer)
+        valid_losses, should_stop = train(cfg, trainer, task, epoch_itr, 
+                                          discriminator, translator, pg_criterion, d_criterion,d_optimizer,
+                                          model)
         if should_stop:
             break
 
@@ -274,11 +276,56 @@ def should_stop_early(cfg: DictConfig, valid_loss: float) -> bool:
         else:
             return False
 
+#-------------------------------------------------------------
+from fairseq import scoring
+import torch.nn.functional as F
+def tensor_padding_to_fixed_length(input_tensor,max_len,pad):
+    output_tensor = input_tensor.cpu()
+    p1d = (0,max_len - input_tensor.shape[0])
+    output_tensor = F.pad(input_tensor,p1d,"constant",pad)
+    return output_tensor.cuda()
 
+
+def get_symbols_to_strip_from_output(generator):
+    if hasattr(generator, "symbols_to_strip_from_output"):
+        return generator.symbols_to_strip_from_output
+    else:
+        return {generator.eos}
+
+def FindMaxLength(lst):
+    maxList = max(lst, key = lambda i: len(i))
+    maxLength = len(maxList)
+    return maxLength
+
+def get_token_translate_from_sample(network,user_parameter,sample,scorer,src_dict,tgt_dict):
+    network.eval()        
+      
+    translator = user_parameter["translator"]    
+    
+    target_tokens  = sample['target']
+    src_tokens = sample['net_input']['src_tokens']
+    
+    with torch.no_grad():
+        hypos = translator.generate([network],sample = sample)
+
+    tmp = []
+    for i in range(len(hypos)):
+        tmp.append(hypos[i][0]["tokens"]) # nbest = 1 so only one translate
+    
+    max_len = FindMaxLength(tmp)
+    hypo_tokens_out = torch.empty(size=(len(tmp),max_len), dtype=torch.int64,device = 'cuda')
+    for i in range(len(tmp)):
+        hypo_tokens_out[i]= tensor_padding_to_fixed_length(tmp[i],max_len,tgt_dict.pad())
+        
+    torch.cuda.empty_cache()
+    return src_tokens,target_tokens,hypo_tokens_out
+
+#-------------------------------------------------------------
 @metrics.aggregate("train")
 def train(
-    cfg: DictConfig, trainer: Trainer, task: tasks.FairseqTask, epoch_itr, discriminator, translator, pg_criterion, d_criterion, d_optimizer
-) -> Tuple[List[Optional[float]], bool]:
+    cfg: DictConfig, trainer: Trainer, task: tasks.FairseqTask, epoch_itr, 
+    discriminator, translator, pg_criterion, d_criterion, d_optimizer, model
+) -> Tuple[List[Optional[float]], bool]:    
     """Train the model for one epoch and return validation losses."""
     
     max_len_src = epoch_itr.dataset.src.sizes.max()
@@ -294,6 +341,25 @@ def train(
         "d_criterion": d_criterion,
         "d_optimizer": d_optimizer,
     }
+    
+    scorer = scoring.build_scorer("bleu", task.target_dictionary)
+    device = torch.device(torch.cuda.current_device() if torch.cuda.is_available() else "cpu")
+    
+    def train_discriminator(user_parameter,hypo_input,src_input,target_input):
+        user_parameter["discriminator"].train()
+        user_parameter["d_criterion"].train()
+        fake_labels = Variable(torch.zeros(src_input.size(0)).float())
+        fake_labels = fake_labels.to(src_input.device)
+        
+        disc_out = user_parameter["discriminator"](src_input, hypo_input)
+        d_loss = user_parameter["d_criterion"](disc_out.squeeze(1), fake_labels)
+        acc = torch.sum(torch.round(disc_out).squeeze(1) == fake_labels).float() / len(fake_labels)
+        #print("Discriminator accuracy {:.3f}".format(acc))
+        user_parameter["d_optimizer"].zero_grad()
+        d_loss.backward()
+        user_parameter["d_optimizer"].step()
+        del d_loss
+        torch.cuda.empty_cache()
     
     # Initialize data iterator
     itr = epoch_itr.next_epoch_itr(
@@ -346,8 +412,29 @@ def train(
         with metrics.aggregate("train_inner"), torch.autograd.profiler.record_function(
             "train_step-%d" % i
         ):
+            # part I: train the generator
             log_output = trainer.train_step(samples, user_parameter)
+            # part II: train the discriminator
+            if user_parameter is not None:
+                for i, sample in enumerate(samples):
+                    if "target" in sample:
+                        sample["target"] =  sample["target"].to(device)
+                        sample['net_input']['src_tokens'] = sample['net_input']['src_tokens'].to(device)
+                    else:
+                        sample = sample.to(device)
+                    src_tokens, target_tokens, hypo_tokens = get_token_translate_from_sample(model,user_parameter,
+                                                                sample, scorer,task.source_dictionary,task.target_dictionary)
+                    train_discriminator(user_parameter,
+                                        hypo_input = hypo_tokens,
+                                        target_input = target_tokens,
+                                        src_input = src_tokens,
+                                    )
+                    del target_tokens
+                    del src_tokens
+                    del hypo_tokens
+                    torch.cuda.empty_cache()
             #print("After batch {0} GPU memory used {1:.3f}".format(i,get_gpu_memory_map()))
+            
             # log mid-epoch stats
             num_updates = trainer.get_num_updates()
             if num_updates % cfg.common.log_interval == 0:
@@ -547,14 +634,15 @@ def cli_main(
                         '--optimizer', 'adam', '--adam-betas', '(0.9, 0.98)',
                         '--reset-optimizer',
                         '--lr', '0.0005', '--clip-norm', '0.0',   
-                        '--label-smoothing', '0.1', '--seed', '2048',
-                        '--max-tokens', '120',
-                        #'--batch-size', '10',
+                        #'--label-smoothing', '0.1',
+                        '--seed', '2048',
+                        #'--max-tokens', '200',
+                        '--batch-size', '16',
                         '--max-epoch', '33',
                         '--lr-scheduler', 'inverse_sqrt',
                         '--weight-decay', '0.0',
                         '--user-dir', './user_dir',   
-                        '--criterion', 'modify_label_smoothed_cross_entropy',
+                        '--criterion', 'pg_cross_entropy',
                         '--max-update', '800000', '--warmup-updates', '4000', '--warmup-init-lr' ,'1e-07',
                         #'--no-progress-bar',
                         '--bpe','subword_nmt',

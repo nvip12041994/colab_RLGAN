@@ -15,7 +15,9 @@ class PGLoss(torch.nn.Module):
         self.reduce = reduce
 
     def forward(self, logprobs, label, reward, use_cuda):
-        bsz, seqlen, _ = logprobs.size()
+        #bsz, seqlen, _ = logprobs.size()
+        bsz = logprobs.shape[0]
+        seqlen = logprobs.shape[1]
         loss = 0
         logprobs = logprobs.clone()
         for i in range(bsz):
