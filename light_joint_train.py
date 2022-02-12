@@ -636,7 +636,7 @@ def cli_main(
                         '--reset-optimizer',
                         '--lr', '0.0005', '--clip-norm', '0.0',   
                         #'--label-smoothing', '0.1',
-                        '--seed', '2048',
+                        #'--seed', '2048',
                         #'--max-tokens', '200',
                         '--batch-size', '16', #64
                         '--max-epoch', '33',
