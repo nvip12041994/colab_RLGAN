@@ -234,7 +234,7 @@ def main(cfg: FairseqConfig) -> None:
             # don't cache epoch iterators for sharded datasets
             disable_iterator_cache=task.has_sharded_data("train"),
         )
-        # part II: train the discriminator
+        
         
     train_meter.stop()
     logger.info("done training in {:.1f} seconds".format(train_meter.sum))
@@ -449,7 +449,7 @@ def train(
         valid_losses, should_stop = validate_and_save(
             cfg, trainer, task, epoch_itr, valid_subsets, end_of_epoch
         )
-
+        
         if should_stop:
             break
 
@@ -529,7 +529,8 @@ def validate_and_save(
             and num_updates % cfg.dataset.validate_interval_updates == 0
         )
     ) and not cfg.dataset.disable_validation
-
+    # #test
+    # do_validate = True
     # Validate
     valid_losses = [None]
     if do_validate:
@@ -637,7 +638,7 @@ def cli_main(
                         #'--label-smoothing', '0.1',
                         '--seed', '2048',
                         #'--max-tokens', '200',
-                        '--batch-size', '16',
+                        '--batch-size', '16', #64
                         '--max-epoch', '33',
                         '--lr-scheduler', 'inverse_sqrt',
                         '--weight-decay', '0.0',

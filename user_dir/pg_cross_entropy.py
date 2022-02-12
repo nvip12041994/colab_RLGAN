@@ -137,11 +137,13 @@ class CrossEntropyCriterion(FairseqCriterion):
         3) logging outputs to display while training
         """
         net_output = model(**sample["net_input"])
+        loss, _ = self.compute_loss(model, net_output, sample, reduce=reduce)
         
         real_random_number = int.from_bytes(os.urandom(1), byteorder="big")
         if real_random_number > 127:
+        #if True:
             # MLE training
-            loss, _ = self.compute_loss(model, net_output, sample, reduce=reduce)
+            loss = loss
         else:
             # Policy gradient training
             if user_parameter is not None:
@@ -152,19 +154,20 @@ class CrossEntropyCriterion(FairseqCriterion):
                                                                                          self.src_dict,
                                                                                          self.tgt_dict)
                    
-                lprobs = model.get_normalized_probs(net_output, log_probs=True)
-                lprobs = lprobs.view(-1, lprobs.size(-1))
-                target = target_tokens.view(-1)
+                # lprobs = model.get_normalized_probs(net_output, log_probs=True)
+                # lprobs = lprobs.view(-1, lprobs.size(-1))
+                # target = target_tokens.view(-1)
+                # loss = F.nll_loss(
+                #     lprobs,
+                #     target,
+                #     ignore_index=self.padding_idx,
+                #     reduction="sum" if reduce else "none",
+                # )
                 
                 with torch.no_grad():
                     reward = user_parameter["discriminator"](target_tokens, hypo_tokens)
-                loss = F.nll_loss(
-                    lprobs,
-                    target,
-                    ignore_index=self.padding_idx,
-                    reduction="sum" if reduce else "none",
-                )
-                average_reward = torch.mean(reward)
+                
+                average_reward = torch.sub(1,torch.mean(reward))
                 loss = loss*average_reward
 
         sample_size = (
