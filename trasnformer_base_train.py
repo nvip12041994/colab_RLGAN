@@ -472,7 +472,7 @@ def cli_main(
                         '--criterion', 'lightconv_label_smoothed_cross_entropy', '--label-smoothing', '0.1',
                         #'--seed', '2048',
                         
-                        '--max-tokens', '8000',
+                        '--max-tokens', '5000',
                         '--max-epoch', '4000',
                         
                         
