@@ -639,7 +639,7 @@ def cli_main(
                         #'--seed', '2048',
                         #'--max-tokens', '200',
                         '--batch-size', '16', #64
-                        '--max-epoch', '33',
+                        #'--max-epoch', '33',
                         '--lr-scheduler', 'inverse_sqrt',
                         '--weight-decay', '0.0',
                         '--user-dir', './user_dir',   

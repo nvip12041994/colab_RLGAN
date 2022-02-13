@@ -464,17 +464,17 @@ def cli_main(
     lightconv_option = ['data-bin/iwslt15.tokenized.en-vi',
                         '--arch', 'lightconv_iwslt_de_en',
                         '--encoder-conv-type', 'dynamic', '--decoder-conv-type','dynamic',
-                        
+                        '--dropout', '0.3',
                         '--optimizer', 'adam', '--adam-betas', '(0.9, 0.98)', '--weight-decay', '0.0',
                         '--lr', '0.0005', '--clip-norm', '0', '--weight-decay', '0.0',
                         '--lr-scheduler', 'cosine',
                         
                         '--user-dir', './user_dir',
                         '--criterion', 'lightconv_label_smoothed_cross_entropy', '--label-smoothing', '0.1',
-                        '--seed', '2048',
+                        #'--seed', '2048',
                         
-                        '--max-tokens', '50',
-                        '--max-epoch', '400',
+                        '--max-tokens', '15000',
+                        #'--max-epoch', '400',
                         
                         
                         '--max-update', '800000', '--warmup-updates', '4000', '--warmup-init-lr' ,'1e-07',
