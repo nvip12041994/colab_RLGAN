@@ -690,7 +690,7 @@ def cli_main(
                         #'--label-smoothing', '0.1',
                         #'--seed', '2048',
                         #'--max-tokens', '200',
-                        '--batch-size', '16', #16
+                        '--batch-size', '32', #16
                         #'--max-epoch', '33',
                         '--lr-scheduler', 'inverse_sqrt',
                         '--weight-decay', '0.0',
