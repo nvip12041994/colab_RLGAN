@@ -65,41 +65,6 @@ def get_token_translate_from_sample(network,user_parameter,sample,scorer,src_dic
     
     with torch.no_grad():
         hypos = translator.generate([network],sample = sample)
-       
-    
-    # for i, sample_id in enumerate(sample["id"].tolist()):
-    #     #print("==================")
-    #     has_target = sample["target"] is not None
-
-    #     # Remove padding
-    #     if "src_tokens" in sample["net_input"]:
-    #         src_token = utils.strip_pad(
-    #             sample["net_input"]["src_tokens"][i, :], tgt_dict.pad()
-    #         )
-    #     else:
-    #         src_token = None
-
-    #     target_token = None
-        
-    #     if has_target:
-    #         target_token = (
-    #             utils.strip_pad(sample["target"][i, :], tgt_dict.pad()).int().cpu()
-    #         )
-        
-    #     src_str = src_dict.string(src_token, None)
-    #     # Process top predictions
-        
-    #     for j, hypo in enumerate(hypos[i][: 1]): # nbest = 1            
-    #         hypo_token, hypo_str, alignment = utils.post_process_prediction(
-    #             hypo_tokens=hypo["tokens"].int().cpu(),
-    #             src_str=src_str,
-    #             alignment=None,
-    #             align_dict=None,
-    #             tgt_dict=tgt_dict,
-    #             remove_bpe=None,
-    #             extra_symbols_to_ignore=get_symbols_to_strip_from_output(translator),
-    #         )            
-    #         scorer.add(target_token, hypo_token)
 
     tmp = []
     for i in range(len(hypos)):
@@ -153,22 +118,12 @@ class CrossEntropyCriterion(FairseqCriterion):
                                                                                          self.scorer,
                                                                                          self.src_dict,
                                                                                          self.tgt_dict)
-                   
-                # lprobs = model.get_normalized_probs(net_output, log_probs=True)
-                # lprobs = lprobs.view(-1, lprobs.size(-1))
-                # target = target_tokens.view(-1)
-                # loss = F.nll_loss(
-                #     lprobs,
-                #     target,
-                #     ignore_index=self.padding_idx,
-                #     reduction="sum" if reduce else "none",
-                # )
-                
+
                 with torch.no_grad():
                     reward = user_parameter["discriminator"](target_tokens, hypo_tokens)
                 
                 average_reward = torch.sub(1,torch.mean(reward))
-                loss = loss*average_reward
+                loss = loss + loss*average_reward
 
         sample_size = (
             sample["target"].size(0) if self.sentence_avg else sample["ntokens"]

@@ -307,18 +307,65 @@ def get_token_translate_from_sample(network,user_parameter,sample,scorer,src_dic
     
     with torch.no_grad():
         hypos = translator.generate([network],sample = sample)
-
     tmp = []
-    for i in range(len(hypos)):
-        tmp.append(hypos[i][0]["tokens"]) # nbest = 1 so only one translate
+    bleus = []
+    for i, sample_id in enumerate(sample["id"].tolist()):
+        #print("==================")
+        has_target = sample["target"] is not None
+
+        # Remove padding
+        if "src_tokens" in sample["net_input"]:
+            src_token = utils.strip_pad(
+                sample["net_input"]["src_tokens"][i, :], tgt_dict.pad()
+            )
+        else:
+            src_token = None
+
+        target_token = None
+        
+        if has_target:
+            target_token = (
+                utils.strip_pad(sample["target"][i, :], tgt_dict.pad()).int().cpu()
+            )
+        
+        src_str = src_dict.string(src_token, None)
+        target_str = tgt_dict.string(
+                    target_token,
+                    None,
+                    escape_unk=True,
+                    extra_symbols_to_ignore=get_symbols_to_strip_from_output(translator),
+                )
+        # Process top predictions
+        
+        for j, hypo in enumerate(hypos[i][: 1]): # nbest = 1            
+            hypo_token, hypo_str, alignment = utils.post_process_prediction(
+                hypo_tokens=hypo["tokens"].int().cpu(),
+                src_str=src_str,
+                alignment=None,
+                align_dict=None,
+                tgt_dict=tgt_dict,
+                remove_bpe=None,
+                extra_symbols_to_ignore=get_symbols_to_strip_from_output(translator),
+            )
+            tmp.append(hypo["tokens"])
+            scorer.add(target_token, hypo_token)
+            if scorer.score() >= 40:# Maximum BLEU = 100
+                bleus.append(1.0)
+            else:
+                bleus.append(0.0)
+            
+    # tmp = []
+    
+    # for i in range(len(hypos)):
+    #     tmp.append(hypos[i][0]["tokens"]) # nbest = 1 so only one translate
     
     max_len = FindMaxLength(tmp)
     hypo_tokens_out = torch.empty(size=(len(tmp),max_len), dtype=torch.int64,device = 'cuda')
     for i in range(len(tmp)):
         hypo_tokens_out[i]= tensor_padding_to_fixed_length(tmp[i],max_len,tgt_dict.pad())
-        
+
     torch.cuda.empty_cache()
-    return src_tokens,target_tokens,hypo_tokens_out
+    return src_tokens,target_tokens,hypo_tokens_out,bleus
 
 #-------------------------------------------------------------
 @metrics.aggregate("train")
@@ -345,21 +392,24 @@ def train(
     scorer = scoring.build_scorer("bleu", task.target_dictionary)
     device = torch.device(torch.cuda.current_device() if torch.cuda.is_available() else "cpu")
     
-    def train_discriminator(user_parameter,hypo_input,src_input,target_input):
+    def train_discriminator(user_parameter,hypo_input,src_input,target_input,bleu):
         user_parameter["discriminator"].train()
         user_parameter["d_criterion"].train()
-        fake_labels = Variable(torch.zeros(src_input.size(0)).float())
-        fake_labels = fake_labels.to(src_input.device)
+        #fake_labels = Variable(torch.zeros(src_input.size(0)).float())
+        fake_labels = torch.tensor(bleu)
+        fake_labels = fake_labels.to(target_input.device)
         
-        disc_out = user_parameter["discriminator"](src_input, hypo_input)
+        disc_out = user_parameter["discriminator"](target_input, hypo_input)
         d_loss = user_parameter["d_criterion"](disc_out.squeeze(1), fake_labels)
-        acc = torch.sum(torch.round(disc_out).squeeze(1) == fake_labels).float() / len(fake_labels)
+        #acc = torch.sum(torch.div(disc_out.squeeze(1), fake_labels,rounding_mode='trunc')).float() / len(fake_labels)
         #print("Discriminator accuracy {:.3f}".format(acc))
+        acc = torch.sum(torch.round(disc_out).squeeze(1) == fake_labels).float() / len(fake_labels)
         user_parameter["d_optimizer"].zero_grad()
         d_loss.backward()
         user_parameter["d_optimizer"].step()
         del d_loss
         torch.cuda.empty_cache()
+        return acc
     
     # Initialize data iterator
     itr = epoch_itr.next_epoch_itr(
@@ -422,12 +472,13 @@ def train(
                         sample['net_input']['src_tokens'] = sample['net_input']['src_tokens'].to(device)
                     else:
                         sample = sample.to(device)
-                    src_tokens, target_tokens, hypo_tokens = get_token_translate_from_sample(model,user_parameter,
+                    src_tokens, target_tokens, hypo_tokens, bleus = get_token_translate_from_sample(model,user_parameter,
                                                                 sample, scorer,task.source_dictionary,task.target_dictionary)
-                    train_discriminator(user_parameter,
+                    discriminator_acc = train_discriminator(user_parameter,
                                         hypo_input = hypo_tokens,
                                         target_input = target_tokens,
                                         src_input = src_tokens,
+                                        bleu = bleus,
                                     )
                     del target_tokens
                     del src_tokens
@@ -634,11 +685,12 @@ def cli_main(
                         '--arch', 'transformer_iwslt_de_en',
                         '--optimizer', 'adam', '--adam-betas', '(0.9, 0.98)',
                         '--reset-optimizer',
-                        '--lr', '0.0005', '--clip-norm', '0.0',   
+                        '--lr', '0.0005', '--clip-norm', '0.0',
+                        '--dropout', '0.3',
                         #'--label-smoothing', '0.1',
                         #'--seed', '2048',
                         #'--max-tokens', '200',
-                        '--batch-size', '16', #64
+                        '--batch-size', '16', #16
                         #'--max-epoch', '33',
                         '--lr-scheduler', 'inverse_sqrt',
                         '--weight-decay', '0.0',

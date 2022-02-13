@@ -161,10 +161,10 @@ class Discriminator_lightconv(nn.Module):
         )
        
         self.classifier = nn.Sequential(
-            nn.Dropout(),
+            nn.Dropout(0.3),
             Linear(6144, 20),
             nn.ReLU(),
-            nn.Dropout(),
+            nn.Dropout(0.3),
             Linear(20, 20),
             nn.ReLU(),
             Linear(20, 1),
