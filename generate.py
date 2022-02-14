@@ -22,9 +22,6 @@ from omegaconf import DictConfig
 
 
 def main(cfg: DictConfig):
-    print("-------------------------------------------------")
-    print(cfg)
-    print("-------------------------------------------------")
     if isinstance(cfg, Namespace):
         cfg = convert_namespace_to_omegaconf(cfg)
 
@@ -395,14 +392,20 @@ def _main(cfg: DictConfig, output_file):
         )
 
     return scorer
-
+from os import walk
 
 def cli_main():
     parser = options.get_generation_parser()
-    cur_model = ['./data-bin/iwslt15.tokenized.en-vi','--beam','10', '--max-sentences', '200', '--path', 'checkpoints/transformer/checkpoint_best.pt','--bpe', 'subword_nmt', '--bpe-codes', 'bpe_code', '--sacrebleu']
-    args = options.parse_args_and_arch(parser, input_args = cur_model)
-    main(args)
-
+    #cur_model = ['./data-bin/iwslt15.tokenized.en-vi','--beam','10', '--max-sentences', '200', '--path', 'checkpoints/transformer/checkpoint_best.pt','--bpe', 'subword_nmt', '--bpe-codes', 'bpe_code', '--sacrebleu']
+    #args = options.parse_args_and_arch(parser, input_args = cur_model)
+    #main(args)
+    cur_model = ['./data-bin/iwslt15.tokenized.en-vi','--beam','5', '--path', '','--bpe', 'subword_nmt', '--bpe-codes', 'bpe_code', '--sacrebleu', '--quiet']
+    filenames = next(walk('checkpoints/transformer/'), (None, None, []))[2]
+    for i in range(len(filenames)):
+        cur_model[4] = 'checkpoints/transformer/' + filenames[i]
+        args = options.parse_args_and_arch(parser, input_args = cur_model)
+        main(args)
+    #print(cur_model)
 
 if __name__ == "__main__":
     cli_main()
