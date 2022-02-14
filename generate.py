@@ -395,13 +395,14 @@ def _main(cfg: DictConfig, output_file):
 from os import walk
 
 def cli_main():
-    parser = options.get_generation_parser()
+    
     #cur_model = ['./data-bin/iwslt15.tokenized.en-vi','--beam','10', '--max-sentences', '200', '--path', 'checkpoints/transformer/checkpoint_best.pt','--bpe', 'subword_nmt', '--bpe-codes', 'bpe_code', '--sacrebleu']
     #args = options.parse_args_and_arch(parser, input_args = cur_model)
     #main(args)
     cur_model = ['./data-bin/iwslt15.tokenized.en-vi','--beam','5', '--path', '','--bpe', 'subword_nmt', '--bpe-codes', 'bpe_code', '--sacrebleu', '--quiet']
     filenames = next(walk('checkpoints/transformer/'), (None, None, []))[2]
     for i in range(len(filenames)):
+        parser = options.get_generation_parser()
         cur_model[4] = 'checkpoints/transformer/' + filenames[i]
         args = options.parse_args_and_arch(parser, input_args = cur_model)
         main(args)
