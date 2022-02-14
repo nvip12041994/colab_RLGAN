@@ -405,7 +405,7 @@ def cli_main():
         cur_model[4] = 'checkpoints/transformer/' + filenames[i]
         args = options.parse_args_and_arch(parser, input_args = cur_model)
         main(args)
-    #print(cur_model)
+        print(filenames[i])
 
 if __name__ == "__main__":
     cli_main()
