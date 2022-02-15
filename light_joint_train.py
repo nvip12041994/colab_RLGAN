@@ -125,47 +125,7 @@ def main(cfg: FairseqConfig) -> None:
     #         sum(getattr(p, "_orig_size", p).numel() for p in model.parameters() if p.requires_grad),
     #     )
     # )
-    print("Generator loaded successfully!")
-    use_cuda = (torch.cuda.device_count() >= 1)
-    discriminator = Discriminator_lightconv(cfg, task, kernel_size=3)
-    if use_cuda:
-        discriminator.cuda()
-    else:
-        discriminator.cpu()
-    d_optimizer = eval("torch.optim." + 'SGD')(filter(lambda x: x.requires_grad,
-                                                                 discriminator.parameters()),
-                                                          0.0001,
-                                                          momentum=0.9,
-                                                          nesterov=True)
-    print("Discriminator loaded successfully!")
-    # # print("--------------------------------")
-    # # print("Discriminator needed param")
-    # # print(cfg.model.encoder_embed_dim)
-    # # print(cfg.model.decoder_embed_dim)
-    # # print("--------------------------------")
-    # # print(task.src_dict)
-    # # print(task.tgt_dict)
-    # # print("--------------------------------")
-    
-    d_criterion = torch.nn.BCELoss()
-    print("Discriminator criterion loaded successfully!")
-    pg_criterion = PGLoss(ignore_index=task.tgt_dict.pad(), size_average=False,reduce=True)
-
-    print("Policy gradient criterion loaded successfully!")
-    # Initialize generator
-    translator = SequenceGenerator(
-        [model],
-        task.tgt_dict,
-        search_strategy = search.Sampling(tgt_dict = task.tgt_dict,sampling_topk=-1, sampling_topp=0.95),
-        
-        beam_size=1,
-        max_len_a=1.2,
-        max_len_b=10,
-    )
-
-    if use_cuda:
-        translator.cuda()
-    print("SequenceGenerator loaded successfully!")
+    print("Generator model loaded successfully!")
     # (optionally) Configure quantization
     if cfg.common.quantization_config_path is not None:
         quantizer = quantization_utils.Quantizer(
@@ -181,7 +141,7 @@ def main(cfg: FairseqConfig) -> None:
         trainer = Trainer(cfg, task, model, criterion, quantizer)
     else:
         trainer = MegatronTrainer(cfg, task, model, criterion)
-
+    
     logger.info(
         "training on {} devices (GPUs/TPUs)".format(
             cfg.distributed_training.distributed_world_size
@@ -202,6 +162,53 @@ def main(cfg: FairseqConfig) -> None:
         # don't cache epoch iterators for sharded datasets
         disable_iterator_cache=task.has_sharded_data("train"),
     )
+    
+    #----------------------------------------------------------------
+    use_cuda = (torch.cuda.device_count() >= 1)
+    discriminator = Discriminator_lightconv(cfg, task, kernel_size=3)
+    d_optimizer = eval("torch.optim." + 'SGD')(filter(lambda x: x.requires_grad,
+                                                                 discriminator.parameters()),
+                                                          0.0001,
+                                                          momentum=0.9,
+                                                          nesterov=True)
+    print("Discriminator loaded successfully!")
+    discriminator_path = "{}/discriminator_{}.pt".format(trainer.cfg.checkpoint.save_dir,epoch_itr.epoch)
+    
+    
+    if os.path.isfile(discriminator_path):
+        checkpoint = torch.load(discriminator_path)
+        discriminator.load_state_dict(checkpoint['model_state_dict'])
+        d_optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        print ("Discriminator load sate successfully")
+    else:
+        print ("No State of Discriminator loaded")
+    
+    if use_cuda:
+        discriminator.cuda()
+    else:
+        discriminator.cpu()
+    
+    
+    d_criterion = torch.nn.BCELoss()
+    print("Discriminator criterion loaded successfully!")
+    pg_criterion = PGLoss(ignore_index=task.tgt_dict.pad(), size_average=False,reduce=True)
+
+    print("Policy gradient criterion loaded successfully!")
+    # Initialize generator
+    translator = SequenceGenerator(
+        [model],
+        task.tgt_dict,
+        search_strategy = search.Sampling(tgt_dict = task.tgt_dict,sampling_topk=-1, sampling_topp=0.95),
+        
+        beam_size=1,
+        max_len_a=1.2,
+        max_len_b=10,
+    )
+
+    if use_cuda:
+        translator.cuda()
+    print("SequenceGenerator loaded successfully!")
+    #----------------------------------------------------------------
 
     max_epoch = cfg.optimization.max_epoch or math.inf
     lr = trainer.get_lr()
@@ -491,14 +498,14 @@ def train(
             if num_updates % cfg.common.log_interval == 0:
                 stats = get_training_stats(metrics.get_smoothed_values("train_inner"))
                 progress.log(stats, tag="train_inner", step=num_updates)
-
+                print("discriminator accuracy{:.2f}".format(discriminator_acc*100))
                 # reset mid-epoch stats after each log interval
                 # the end-of-epoch stats will still be preserved
                 metrics.reset_meters("train_inner")
 
         end_of_epoch = not itr.has_next()
         valid_losses, should_stop = validate_and_save(
-            cfg, trainer, task, epoch_itr, valid_subsets, end_of_epoch
+            cfg, trainer, task, epoch_itr, valid_subsets, end_of_epoch, user_parameter
         )
         
         if should_stop:
@@ -534,6 +541,7 @@ def validate_and_save(
     epoch_itr,
     valid_subsets: List[str],
     end_of_epoch: bool,
+    user_parameter,
 ) -> Tuple[List[Optional[float]], bool]:
     num_updates = trainer.get_num_updates()
     max_update = cfg.optimization.max_update or math.inf
@@ -588,12 +596,20 @@ def validate_and_save(
         valid_losses = validate(cfg, trainer, task, epoch_itr, valid_subsets)
 
     should_stop |= should_stop_early(cfg, valid_losses[0])
-
+    
     # Save checkpoint
+    #do_save = True
     if do_save or should_stop:
         checkpoint_utils.save_checkpoint(
             cfg.checkpoint, trainer, epoch_itr, valid_losses[0]
         )
+        if user_parameter is not None:
+            discriminator_path = "{}/discriminator_{}.pt".format(trainer.cfg.checkpoint.save_dir,epoch_itr.epoch)
+            torch.save({
+                'model_state_dict' : user_parameter["discriminator"].state_dict(),
+                'optimizer_state_dict': user_parameter["d_optimizer"].state_dict(),
+            }, discriminator_path)
+            
 
     return valid_losses, should_stop
 
@@ -697,7 +713,7 @@ def cli_main(
                         '--user-dir', './user_dir',   
                         '--criterion', 'pg_cross_entropy',
                         '--max-update', '800000', '--warmup-updates', '4000', '--warmup-init-lr' ,'1e-07',
-                        #'--no-progress-bar',
+                        '--no-progress-bar',
                         '--bpe','subword_nmt',
                         '--eval-bleu',
                         '--eval-bleu-args', '{"beam": 5, "max_len_a": 1.2, "max_len_b": 10}',
