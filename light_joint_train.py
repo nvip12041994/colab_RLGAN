@@ -488,7 +488,7 @@ def train(
                                         src_input = src_tokens,
                                         bleu = bleus,
                                     )
-                    print("discriminator accuracy{:.2f}".format(discriminator_acc*100))
+                    #print("discriminator accuracy{:.2f}".format(discriminator_acc*100))
                     del target_tokens
                     del src_tokens
                     del hypo_tokens
