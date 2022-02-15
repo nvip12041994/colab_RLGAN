@@ -356,7 +356,8 @@ def get_token_translate_from_sample(network,user_parameter,sample,scorer,src_dic
             )
             tmp.append(hypo["tokens"])
             scorer.add(target_token, hypo_token)
-            if scorer.score() >= 40:# Maximum BLEU = 100
+            bleu_score = scorer.score()
+            if  bleu_score >= 30:# Maximum BLEU = 100
                 bleus.append(1.0)
             else:
                 bleus.append(0.0)
@@ -487,6 +488,7 @@ def train(
                                         src_input = src_tokens,
                                         bleu = bleus,
                                     )
+                    print("discriminator accuracy{:.2f}".format(discriminator_acc*100))
                     del target_tokens
                     del src_tokens
                     del hypo_tokens
