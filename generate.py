@@ -401,12 +401,15 @@ def cli_main():
     #main(args)
     cur_model = ['./data-bin/iwslt15.tokenized.en-vi','--beam','5', '--path', '','--bpe', 'subword_nmt', '--bpe-codes', 'bpe_code', '--sacrebleu', '--quiet']
     filenames = next(walk('checkpoints/transformer/'), (None, None, []))[2]
+    bleu = []
     for i in range(len(filenames)):
         parser = options.get_generation_parser()
         cur_model[4] = 'checkpoints/transformer/' + filenames[i]
         args = options.parse_args_and_arch(parser, input_args = cur_model)
-        main(args)
-        print(filenames[i])
+        result = main(args)
+        bleu.append(filenames[i] + " " + result.result_string())
+    for i in range(len(bleu)):
+        print(bleu[i])
 
 if __name__ == "__main__":
     cli_main()
