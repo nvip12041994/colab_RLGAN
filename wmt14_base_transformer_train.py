@@ -462,7 +462,8 @@ def cli_main(
 ) -> None:
     parser = options.get_training_parser()
     lightconv_option = ['data-bin/wmt14_en_de',
-                        '--arch', 'transformer_vaswani_wmt_en_de_big',
+                        '--arch', 'transformer',
+                        
                         
                         '--optimizer', 'adam', '--adam-betas', '(0.9, 0.98)', '--weight-decay', '0.0',
                         '--lr', '0.0005', '--clip-norm', '0', '--weight-decay', '0.0',
@@ -472,7 +473,7 @@ def cli_main(
                         '--criterion', 'lightconv_label_smoothed_cross_entropy', '--label-smoothing', '0.1',
                         #'--seed', '2048',
                         
-                        '--max-tokens', '5000',
+                        '--max-tokens', '10000',
                         '--max-epoch', '4000',
                         
                         
