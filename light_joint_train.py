@@ -176,6 +176,7 @@ def main(cfg: FairseqConfig) -> None:
     
     
     if os.path.isfile(discriminator_path):
+        print("Load from discriminator_{}.pt".format(epoch_itr.epoch))
         checkpoint = torch.load(discriminator_path)
         discriminator.load_state_dict(checkpoint['model_state_dict'])
         d_optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
@@ -185,10 +186,8 @@ def main(cfg: FairseqConfig) -> None:
     
     if use_cuda:
         discriminator.cuda()
-        d_optimizer.cuda()
     else:
         discriminator.cpu()
-        d_optimizer.cpu()
     
     
     d_criterion = torch.nn.BCELoss()
