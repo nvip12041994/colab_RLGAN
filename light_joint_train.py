@@ -171,6 +171,10 @@ def main(cfg: FairseqConfig) -> None:
                                                           0.0001,
                                                           momentum=0.9,
                                                           nesterov=True)
+    if use_cuda:
+        discriminator.cuda()
+    else:
+        discriminator.cpu()
     print("Discriminator loaded successfully!")
     discriminator_path = "{}/discriminator_{}.pt".format(trainer.cfg.checkpoint.save_dir,epoch_itr.epoch)
     
@@ -180,14 +184,12 @@ def main(cfg: FairseqConfig) -> None:
         checkpoint = torch.load(discriminator_path)
         discriminator.load_state_dict(checkpoint['model_state_dict'])
         d_optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        del checkpoint
         print ("Discriminator load sate successfully")
     else:
         print ("No State of Discriminator loaded")
     
-    if use_cuda:
-        discriminator.cuda()
-    else:
-        discriminator.cpu()
+    
     
     
     d_criterion = torch.nn.BCELoss()
@@ -594,7 +596,7 @@ def validate_and_save(
         )
     ) and not cfg.dataset.disable_validation
     # #test
-    do_validate = True
+    #do_validate = True
     # Validate
     valid_losses = [None]
     if do_validate:
