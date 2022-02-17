@@ -185,8 +185,10 @@ def main(cfg: FairseqConfig) -> None:
     
     if use_cuda:
         discriminator.cuda()
+        d_optimizer.cuda()
     else:
         discriminator.cpu()
+        d_optimizer.cpu()
     
     
     d_criterion = torch.nn.BCELoss()
@@ -466,6 +468,8 @@ def train(
     should_stop = False
     num_updates = trainer.get_num_updates()
     logger.info("Start iterating over samples")
+    #valid_losses = validate(cfg, trainer, task, epoch_itr, valid_subsets)
+    #print(valid_losses)
     for i, samples in enumerate(progress):     
         with metrics.aggregate("train_inner"), torch.autograd.profiler.record_function(
             "train_step-%d" % i
@@ -500,7 +504,7 @@ def train(
             if num_updates % cfg.common.log_interval == 0:
                 stats = get_training_stats(metrics.get_smoothed_values("train_inner"))
                 progress.log(stats, tag="train_inner", step=num_updates)
-                print("discriminator accuracy{:.2f}".format(discriminator_acc*100))
+                print("discriminator accuracy = {:.2f}".format(discriminator_acc*100))
                 # reset mid-epoch stats after each log interval
                 # the end-of-epoch stats will still be preserved
                 metrics.reset_meters("train_inner")
@@ -591,7 +595,7 @@ def validate_and_save(
         )
     ) and not cfg.dataset.disable_validation
     # #test
-    # do_validate = True
+    do_validate = True
     # Validate
     valid_losses = [None]
     if do_validate:
