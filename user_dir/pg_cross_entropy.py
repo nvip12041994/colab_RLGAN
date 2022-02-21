@@ -12,7 +12,7 @@ from fairseq.criterions import FairseqCriterion, register_criterion
 from fairseq.dataclass import FairseqDataclass
 from omegaconf import II
 
-#================================================================
+# ================================================================
 import os
 import torch
 import numpy as np
@@ -21,11 +21,13 @@ import copy
 from torch.autograd import Variable
 from fairseq.sequence_generator import SequenceGenerator
 from fairseq import scoring
+import time
 
-def tensor_padding_to_fixed_length(input_tensor,max_len,pad):
+
+def tensor_padding_to_fixed_length(input_tensor, max_len, pad):
     output_tensor = input_tensor.cpu()
-    p1d = (0,max_len - input_tensor.shape[0])
-    output_tensor = F.pad(input_tensor,p1d,"constant",pad)
+    p1d = (0, max_len - input_tensor.shape[0])
+    output_tensor = F.pad(input_tensor, p1d, "constant", pad)
     return output_tensor.cuda()
 
 
@@ -35,48 +37,54 @@ def get_symbols_to_strip_from_output(generator):
     else:
         return {generator.eos}
 
+
 def FindMaxLength(lst):
-    maxList = max(lst, key = lambda i: len(i))
+    maxList = max(lst, key=lambda i: len(i))
     maxLength = len(maxList)
     return maxLength
 
-def train_discriminator(user_parameter,hypo_input,src_input,target_input):
+
+def train_discriminator(user_parameter, hypo_input, src_input, target_input):
     user_parameter["discriminator"].train()
     user_parameter["d_criterion"].train()
     fake_labels = Variable(torch.zeros(src_input.size(0)).float())
     fake_labels = fake_labels.to(src_input.device)
-    
+
     disc_out = user_parameter["discriminator"](src_input, hypo_input)
     d_loss = user_parameter["d_criterion"](disc_out.squeeze(1), fake_labels)
-    acc = torch.sum(torch.round(disc_out).squeeze(1) == fake_labels).float() / len(fake_labels)
+    acc = torch.sum(torch.round(disc_out).squeeze(
+        1) == fake_labels).float() / len(fake_labels)
     #print("Discriminator accuracy {:.3f}".format(acc))
     user_parameter["d_optimizer"].zero_grad()
     d_loss.backward()
     user_parameter["d_optimizer"].step()
     torch.cuda.empty_cache()
 
-def get_token_translate_from_sample(network,user_parameter,sample,scorer,src_dict,tgt_dict):
-    network.eval()        
-      
-    translator = user_parameter["translator"]    
-    
-    target_tokens  = sample['target']
+def get_token_translate_from_sample(network, user_parameter, sample, scorer, src_dict, tgt_dict):
+    network.eval()
+
+    translator = user_parameter["translator"]
+
+    target_tokens = sample['target']
     src_tokens = sample['net_input']['src_tokens']
-    
+
     with torch.no_grad():
-        hypos = translator.generate([network],sample = sample)
+        hypos = translator.generate(
+            [network], sample=sample, prefix_tokens=None)
 
     tmp = []
     for i in range(len(hypos)):
-        tmp.append(hypos[i][0]["tokens"]) # nbest = 1 so only one translate
-    
+        tmp.append(hypos[i][0]["tokens"])  # nbest = 1 so only one translate
+
     max_len = FindMaxLength(tmp)
-    hypo_tokens_out = torch.empty(size=(len(tmp),max_len), dtype=torch.int64,device = 'cuda')
+    hypo_tokens_out = torch.empty(
+        size=(len(tmp), max_len), dtype=torch.int64, device='cuda')
     for i in range(len(tmp)):
-        hypo_tokens_out[i]= tensor_padding_to_fixed_length(tmp[i],max_len,tgt_dict.pad())
-        
-    torch.cuda.empty_cache()
-    return src_tokens,target_tokens,hypo_tokens_out
+        hypo_tokens_out[i] = tensor_padding_to_fixed_length(
+            tmp[i], max_len, tgt_dict.pad())
+
+    return src_tokens, target_tokens, hypo_tokens_out
+
 
 @dataclass
 class CrossEntropyCriterionConfig(FairseqDataclass):
@@ -88,12 +96,12 @@ class CrossEntropyCriterion(FairseqCriterion):
     def __init__(self, task, sentence_avg):
         super().__init__(task)
         self.sentence_avg = sentence_avg
-        
+
         self.tgt_dict = task.target_dictionary
         self.src_dict = task.source_dictionary
         self.scorer = scoring.build_scorer("bleu", self.tgt_dict)
 
-    def forward(self, model, sample, user_parameter = None, reduce=True):
+    def forward(self, model, sample, user_parameter=None, reduce=True):
         """Compute the loss for the given sample.
 
         Returns a tuple with three elements:
@@ -103,30 +111,33 @@ class CrossEntropyCriterion(FairseqCriterion):
         """
         net_output = model(**sample["net_input"])
         loss, _ = self.compute_loss(model, net_output, sample, reduce=reduce)
-        
+
         real_random_number = int.from_bytes(os.urandom(1), byteorder="big")
-        if real_random_number > 127:
-        #if True:
+        # if real_random_number > 127:
+        if False:
             # MLE training
             loss = loss
         else:
             # Policy gradient training
             if user_parameter is not None:
+                start_time = time.time()
                 src_tokens, target_tokens, hypo_tokens = get_token_translate_from_sample(model,
-                                                                                         user_parameter,
-                                                                                         sample,
-                                                                                         self.scorer,
-                                                                                         self.src_dict,
-                                                                                         self.tgt_dict)
+                                                                                           user_parameter,
+                                                                                           sample,
+                                                                                           self.scorer,
+                                                                                           self.src_dict,
+                                                                                           self.tgt_dict)
+                a = time.time() - start_time
 
                 with torch.no_grad():
                     reward = user_parameter["discriminator"](target_tokens, hypo_tokens)
-                
-                average_reward = torch.sub(1,torch.mean(reward))
+
+                average_reward = torch.sub(1, torch.mean(reward))
                 loss = loss + loss*average_reward
 
         sample_size = (
-            sample["target"].size(0) if self.sentence_avg else sample["ntokens"]
+            sample["target"].size(
+                0) if self.sentence_avg else sample["ntokens"]
         )
         logging_output = {
             "loss": loss.data,
@@ -134,20 +145,7 @@ class CrossEntropyCriterion(FairseqCriterion):
             "nsentences": sample["target"].size(0),
             "sample_size": sample_size,
         }
-        
-        # part II: train the discriminator
-        # if user_parameter is not None:
-        #     src_tokens, target_tokens, hypo_tokens = get_token_translate_from_sample(model,user_parameter,sample,self.scorer,self.src_dict,self.tgt_dict)
-        #     train_discriminator(user_parameter,
-        #                         hypo_input = hypo_tokens,
-        #                         target_input = target_tokens,
-        #                         src_input = src_tokens,
-        #                     )
-        #     del target_tokens
-        #     del src_tokens
-        #     del hypo_tokens
-        #     torch.cuda.empty_cache()
-            
+
         return loss, sample_size, logging_output
 
     def compute_loss(self, model, net_output, sample, reduce=True):
@@ -178,7 +176,8 @@ class CrossEntropyCriterion(FairseqCriterion):
                 "nll_loss", loss_sum / ntokens / math.log(2), ntokens, round=3
             )
             metrics.log_derived(
-                "ppl", lambda meters: utils.get_perplexity(meters["nll_loss"].avg)
+                "ppl", lambda meters: utils.get_perplexity(
+                    meters["nll_loss"].avg)
             )
         else:
             metrics.log_derived(

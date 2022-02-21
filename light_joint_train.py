@@ -40,7 +40,7 @@ from fairseq import search
 from discriminator_lightconv import Discriminator_lightconv
 #from train_discriminator import train_d
 from PGLoss import PGLoss
-
+import time
 import subprocess
 
 def get_gpu_memory_map():   
@@ -208,8 +208,8 @@ def main(cfg: FairseqConfig) -> None:
         max_len_b=10,
     )
 
-    if use_cuda:
-        translator.cuda()
+    # if use_cuda:
+    #     translator.cuda()
     print("SequenceGenerator loaded successfully!")
     #----------------------------------------------------------------
 
@@ -309,14 +309,16 @@ def FindMaxLength(lst):
 
 def get_token_translate_from_sample(network,user_parameter,sample,scorer,src_dict,tgt_dict):
     network.eval()        
-      
-    translator = user_parameter["translator"]    
     
+    translator = user_parameter["translator"]    
     target_tokens  = sample['target']
     src_tokens = sample['net_input']['src_tokens']
     
+
+        
     with torch.no_grad():
         hypos = translator.generate([network],sample = sample)
+
     tmp = []
     bleus = []
     for i, sample_id in enumerate(sample["id"].tolist()):
@@ -364,11 +366,6 @@ def get_token_translate_from_sample(network,user_parameter,sample,scorer,src_dic
                 bleus.append(1.0)
             else:
                 bleus.append(0.0)
-            
-    # tmp = []
-    
-    # for i in range(len(hypos)):
-    #     tmp.append(hypos[i][0]["tokens"]) # nbest = 1 so only one translate
     
     max_len = FindMaxLength(tmp)
     hypo_tokens_out = torch.empty(size=(len(tmp),max_len), dtype=torch.int64,device = 'cuda')
@@ -398,6 +395,7 @@ def train(
         "pg_criterion": pg_criterion, 
         "d_criterion": d_criterion,
         "d_optimizer": d_optimizer,
+        "tokenizer": trainer.task.tokenizer,
     }
     
     scorer = scoring.build_scorer("bleu", task.target_dictionary)
@@ -412,8 +410,7 @@ def train(
         
         disc_out = user_parameter["discriminator"](target_input, hypo_input)
         d_loss = user_parameter["d_criterion"](disc_out.squeeze(1), fake_labels)
-        #acc = torch.sum(torch.div(disc_out.squeeze(1), fake_labels,rounding_mode='trunc')).float() / len(fake_labels)
-        #print("Discriminator accuracy {:.3f}".format(acc))
+        
         acc = torch.sum(torch.round(disc_out).squeeze(1) == fake_labels).float() / len(fake_labels)
         user_parameter["d_optimizer"].zero_grad()
         d_loss.backward()
@@ -485,14 +482,20 @@ def train(
                         sample['net_input']['src_tokens'] = sample['net_input']['src_tokens'].to(device)
                     else:
                         sample = sample.to(device)
+                    
+                    start_time = time.time()
                     src_tokens, target_tokens, hypo_tokens, bleus = get_token_translate_from_sample(model,user_parameter,
                                                                 sample, scorer,task.source_dictionary,task.target_dictionary)
+                    a = time.time() - start_time
+                    
+                    start_time = time.time()
                     discriminator_acc = train_discriminator(user_parameter,
                                         hypo_input = hypo_tokens,
                                         target_input = target_tokens,
                                         src_input = src_tokens,
                                         bleu = bleus,
                                     )
+                    b = time.time() - start_time
                     #print("discriminator accuracy{:.2f}".format(discriminator_acc*100))
                     del target_tokens
                     del src_tokens

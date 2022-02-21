@@ -404,12 +404,13 @@ def cli_main():
     bleu = []
     for i in range(len(filenames)):
         parser = options.get_generation_parser()
-        cur_model[4] = 'checkpoints/transformer/' + filenames[i]
-        args = options.parse_args_and_arch(parser, input_args = cur_model)
-        result = main(args)
-        bleu.append(filenames[i] + " " + result.result_string())
-    for i in range(len(bleu)):
-        print(bleu[i])
+        if "checkpoint" in filenames[i]:
+            cur_model[4] = 'checkpoints/transformer/' + filenames[i]
+            args = options.parse_args_and_arch(parser, input_args = cur_model)
+            result = main(args)
+            bleu.append(filenames[i] + " " + result.result_string())
+            for i in range(len(bleu)):
+                print(bleu[i])
 
 if __name__ == "__main__":
     cli_main()
