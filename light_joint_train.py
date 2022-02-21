@@ -362,7 +362,7 @@ def get_token_translate_from_sample(network,user_parameter,sample,scorer,src_dic
             tmp.append(hypo["tokens"])
             scorer.add(target_token, hypo_token)
             bleu_score = scorer.score()
-            if  bleu_score >= 30:# Maximum BLEU = 100
+            if  bleu_score >= 40:# Maximum BLEU = 100
                 bleus.append(1.0)
             else:
                 bleus.append(0.0)
@@ -483,19 +483,19 @@ def train(
                     else:
                         sample = sample.to(device)
                     
-                    start_time = time.time()
+                    #start_time = time.time()
                     src_tokens, target_tokens, hypo_tokens, bleus = get_token_translate_from_sample(model,user_parameter,
                                                                 sample, scorer,task.source_dictionary,task.target_dictionary)
-                    a = time.time() - start_time
+                    #a = time.time() - start_time
                     
-                    start_time = time.time()
+                    #start_time = time.time()
                     discriminator_acc = train_discriminator(user_parameter,
                                         hypo_input = hypo_tokens,
                                         target_input = target_tokens,
                                         src_input = src_tokens,
                                         bleu = bleus,
                                     )
-                    b = time.time() - start_time
+                    #b = time.time() - start_time
                     #print("discriminator accuracy{:.2f}".format(discriminator_acc*100))
                     del target_tokens
                     del src_tokens

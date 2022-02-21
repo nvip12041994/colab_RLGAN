@@ -113,21 +113,21 @@ class CrossEntropyCriterion(FairseqCriterion):
         loss, _ = self.compute_loss(model, net_output, sample, reduce=reduce)
 
         real_random_number = int.from_bytes(os.urandom(1), byteorder="big")
-        # if real_random_number > 127:
-        if False:
+        if real_random_number > 127:
+        #if False:
             # MLE training
             loss = loss
         else:
             # Policy gradient training
             if user_parameter is not None:
-                start_time = time.time()
+                #start_time = time.time()
                 src_tokens, target_tokens, hypo_tokens = get_token_translate_from_sample(model,
                                                                                            user_parameter,
                                                                                            sample,
                                                                                            self.scorer,
                                                                                            self.src_dict,
                                                                                            self.tgt_dict)
-                a = time.time() - start_time
+                #a = time.time() - start_time
 
                 with torch.no_grad():
                     reward = user_parameter["discriminator"](target_tokens, hypo_tokens)

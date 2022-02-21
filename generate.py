@@ -409,8 +409,8 @@ def cli_main():
             args = options.parse_args_and_arch(parser, input_args = cur_model)
             result = main(args)
             bleu.append(filenames[i] + " " + result.result_string())
-            for i in range(len(bleu)):
-                print(bleu[i])
+    for i in range(len(bleu)):
+        print(bleu[i])
 
 if __name__ == "__main__":
     cli_main()
