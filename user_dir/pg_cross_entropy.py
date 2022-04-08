@@ -182,7 +182,7 @@ class CrossEntropyCriterion(FairseqCriterion):
         3) logging outputs to display while training
         """
         net_output = model(**sample["net_input"])
-        loss, _ = self.compute_loss(model, net_output, sample, reduce=reduce)
+        #loss, _ = self.compute_loss(model, net_output, sample, reduce=reduce)
 
         # real_random_number = int.from_bytes(os.urandom(1), byteorder="big")
         # if real_random_number > 127:

@@ -744,7 +744,7 @@ def cli_main(
                         '--user-dir', './user_dir',   
                         '--criterion', 'pg_cross_entropy',
                         '--max-update', '800000', '--warmup-updates', '4000', '--warmup-init-lr' ,'1e-07',
-                        '--no-progress-bar',
+                        #'--no-progress-bar',
                         '--bpe','subword_nmt',
                         '--eval-bleu',
                         '--eval-bleu-args', '{"beam": 5, "max_len_a": 1.2, "max_len_b": 10}',
