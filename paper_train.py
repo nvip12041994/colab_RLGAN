@@ -37,7 +37,7 @@ import torch
 from torch.autograd import Variable
 from fairseq import search
 
-from discriminator_lightconv import Discriminator_lightconv
+from discriminator_paper import Discriminator_lightconv
 #from train_discriminator import train_d
 from PGLoss import PGLoss
 import time
@@ -179,7 +179,8 @@ def main(cfg: FairseqConfig) -> None:
     discriminator_path = "{}/discriminator_{}.pt".format(trainer.cfg.checkpoint.save_dir,epoch_itr.epoch)
     
     
-    if os.path.isfile(discriminator_path):
+    #if os.path.isfile(discriminator_path):
+    if False:    
         print("Load from discriminator_{}.pt".format(epoch_itr.epoch))
         checkpoint = torch.load(discriminator_path)
         discriminator.load_state_dict(checkpoint['model_state_dict'])
@@ -193,8 +194,8 @@ def main(cfg: FairseqConfig) -> None:
     
     
     d_criterion = torch.nn.BCELoss()
-    # print("Discriminator criterion loaded successfully!")
-    # pg_criterion = PGLoss(ignore_index=task.tgt_dict.pad(), size_average=False,reduce=True)
+    print("Discriminator criterion loaded successfully!")
+    pg_criterion = PGLoss(ignore_index=task.tgt_dict.pad(), size_average=False,reduce=True)
 
     print("Policy gradient criterion loaded successfully!")
     # Initialize generator
@@ -229,7 +230,7 @@ def main(cfg: FairseqConfig) -> None:
 
         # train for one epoch
         valid_losses, should_stop = train(cfg, trainer, task, epoch_itr, 
-                                          discriminator, translator, d_criterion,d_optimizer,
+                                          discriminator, translator, pg_criterion, d_criterion,d_optimizer,
                                           model)
         if should_stop:
             break
@@ -361,11 +362,11 @@ def get_token_translate_from_sample(network,user_parameter,sample,scorer,src_dic
             )
             tmp.append(hypo["tokens"])
             scorer.add(target_token, hypo_token)
-            # bleu_score = scorer.score()
-            # if  bleu_score >= 40:# Maximum BLEU = 100
-            #     bleus.append(1.0)
-            # else:
-            #     bleus.append(0.0)
+            bleu_score = scorer.score()
+            if  bleu_score >= 40:# Maximum BLEU = 100
+                bleus.append(1.0)
+            else:
+                bleus.append(0.0)
     
     max_len = FindMaxLength(tmp)
     hypo_tokens_out = torch.empty(size=(len(tmp),max_len), dtype=torch.int64,device = 'cuda')
@@ -379,29 +380,23 @@ def get_token_translate_from_sample(network,user_parameter,sample,scorer,src_dic
 @metrics.aggregate("train")
 def train(
     cfg: DictConfig, trainer: Trainer, task: tasks.FairseqTask, epoch_itr, 
-    discriminator, translator, d_criterion, d_optimizer, model
+    discriminator, translator, pg_criterion, d_criterion, d_optimizer, model
 ) -> Tuple[List[Optional[float]], bool]:    
     """Train the model for one epoch and return validation losses."""
     
     max_len_src = epoch_itr.dataset.src.sizes.max()
     max_len_target = epoch_itr.dataset.tgt.sizes.max()
     max_len_hypo = math.ceil(max_len_src*translator.max_len_a) + translator.max_len_b
-    state_list, action_list, reward_list, next_state_list, done_list = [], [], [], [], []
     user_parameter = {
         "max_len_src": max_len_src,
         "max_len_target": max_len_target,
         "max_len_hypo": max_len_hypo,
         "discriminator": discriminator, 
-        "translator": translator,
+        "translator": translator, 
+        "pg_criterion": pg_criterion, 
         "d_criterion": d_criterion,
         "d_optimizer": d_optimizer,
         "tokenizer": trainer.task.tokenizer,
-        
-        "state_list": state_list,
-        "action_list": action_list,
-        "reward_list": reward_list,
-        "next_state_list": next_state_list,
-        "done_list": done_list,
     }
     
     scorer = scoring.build_scorer("bleu", task.target_dictionary)
@@ -410,25 +405,14 @@ def train(
     def train_discriminator(user_parameter,hypo_input,src_input,target_input,bleu):
         user_parameter["discriminator"].train()
         user_parameter["d_criterion"].train()
+        #fake_labels = Variable(torch.zeros(src_input.size(0)).float())
+        fake_labels = torch.tensor(bleu)
+        fake_labels = fake_labels.to(target_input.device)
         
-        fake_labels = Variable(torch.zeros(src_input.size(0)).float())
-        fake_labels = fake_labels.to(src_input.device)
+        disc_out = user_parameter["discriminator"](target_input, hypo_input)
+        d_loss = user_parameter["d_criterion"](disc_out.squeeze(1), fake_labels)
         
-        true_labels = Variable(torch.ones(target_input.size(0)).float())
-        true_labels = true_labels.to(target_input.device)
-        labels = torch.cat((fake_labels,true_labels))
-        # fake_labels = torch.tensor(bleu)
-        # fake_labels = fake_labels.to(target_input.device)
-        disc_out = user_parameter["discriminator"](src_input, hypo_input)
-        _disc_out = user_parameter["discriminator"](src_input, target_input)
-        
-        input_d_loss = torch.cat((disc_out,_disc_out))
-        batch_input = input_d_loss.view(-1)
-        
-        d_loss = user_parameter["d_criterion"](batch_input, labels)
-        
-        
-        acc = torch.sum(torch.round(input_d_loss).squeeze(1) == labels).float() / len(labels)
+        acc = torch.sum(torch.round(disc_out).squeeze(1) == fake_labels).float() / len(fake_labels)
         user_parameter["d_optimizer"].zero_grad()
         d_loss.backward()
         user_parameter["d_optimizer"].step()
@@ -489,9 +473,6 @@ def train(
         with metrics.aggregate("train_inner"), torch.autograd.profiler.record_function(
             "train_step-%d" % i
         ):
-
-            # enter action into the env
-            
             # part I: train the generator
             log_output = trainer.train_step(samples, user_parameter)
             # part II: train the discriminator
@@ -504,7 +485,6 @@ def train(
                         sample = sample.to(device)
                     
                     #start_time = time.time()
-                    # select an action from the agent's policy
                     src_tokens, target_tokens, hypo_tokens, bleus = get_token_translate_from_sample(model,user_parameter,
                                                                 sample, scorer,task.source_dictionary,task.target_dictionary)
                     #a = time.time() - start_time

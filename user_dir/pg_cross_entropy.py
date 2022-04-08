@@ -60,7 +60,8 @@ def train_discriminator(user_parameter, hypo_input, src_input, target_input):
     user_parameter["d_optimizer"].step()
     torch.cuda.empty_cache()
 
-def get_token_translate_from_sample(network, user_parameter, sample, scorer, src_dict, tgt_dict):
+
+def get_token_translate_from_sample_no_bleu(network, user_parameter, sample, scorer, src_dict, tgt_dict):
     network.eval()
 
     translator = user_parameter["translator"]
@@ -86,6 +87,75 @@ def get_token_translate_from_sample(network, user_parameter, sample, scorer, src
     return src_tokens, target_tokens, hypo_tokens_out
 
 
+def get_token_translate_from_sample(network, user_parameter, sample, scorer, src_dict, tgt_dict):
+    network.eval()
+
+    translator = user_parameter["translator"]
+    target_tokens = sample['target']
+    src_tokens = sample['net_input']['src_tokens']
+
+    with torch.no_grad():
+        hypos = translator.generate([network], sample=sample)
+
+    tmp = []
+    bleus = []
+    for i, sample_id in enumerate(sample["id"].tolist()):
+        # print("==================")
+        has_target = sample["target"] is not None
+
+        # Remove padding
+        if "src_tokens" in sample["net_input"]:
+            src_token = utils.strip_pad(
+                sample["net_input"]["src_tokens"][i, :], tgt_dict.pad()
+            )
+        else:
+            src_token = None
+
+        target_token = None
+
+        if has_target:
+            target_token = (
+                utils.strip_pad(sample["target"][i, :],
+                                tgt_dict.pad()).int().cpu()
+            )
+
+        src_str = src_dict.string(src_token, None)
+        target_str = tgt_dict.string(
+            target_token,
+            None,
+            escape_unk=True,
+            extra_symbols_to_ignore=get_symbols_to_strip_from_output(
+                translator),
+        )
+        # Process top predictions
+
+        for j, hypo in enumerate(hypos[i][: 1]):  # nbest = 1
+            hypo_token, hypo_str, alignment = utils.post_process_prediction(
+                hypo_tokens=hypo["tokens"].int().cpu(),
+                src_str=src_str,
+                alignment=None,
+                align_dict=None,
+                tgt_dict=tgt_dict,
+                remove_bpe=None,
+                extra_symbols_to_ignore=get_symbols_to_strip_from_output(
+                    translator),
+            )
+            tmp.append(hypo["tokens"])
+            scorer.add(target_token, hypo_token)
+            bleu_score = scorer.score()/100
+            bleus.append(bleu_score)
+
+    max_len = FindMaxLength(tmp)
+    hypo_tokens_out = torch.empty(
+        size=(len(tmp), max_len), dtype=torch.int64, device='cuda')
+    for i in range(len(tmp)):
+        hypo_tokens_out[i] = tensor_padding_to_fixed_length(
+            tmp[i], max_len, tgt_dict.pad())
+
+    torch.cuda.empty_cache()
+    return src_tokens, target_tokens, hypo_tokens_out, bleus
+
+
 @dataclass
 class CrossEntropyCriterionConfig(FairseqDataclass):
     sentence_avg: bool = II("optimization.sentence_avg")
@@ -100,6 +170,8 @@ class CrossEntropyCriterion(FairseqCriterion):
         self.tgt_dict = task.target_dictionary
         self.src_dict = task.source_dictionary
         self.scorer = scoring.build_scorer("bleu", self.tgt_dict)
+        self._beta = 0.5
+        self._lamda = 0.7
 
     def forward(self, model, sample, user_parameter=None, reduce=True):
         """Compute the loss for the given sample.
@@ -112,29 +184,44 @@ class CrossEntropyCriterion(FairseqCriterion):
         net_output = model(**sample["net_input"])
         loss, _ = self.compute_loss(model, net_output, sample, reduce=reduce)
 
-        real_random_number = int.from_bytes(os.urandom(1), byteorder="big")
-        if real_random_number > 127:
-        #if False:
+        # real_random_number = int.from_bytes(os.urandom(1), byteorder="big")
+        # if real_random_number > 127:
+        if False:
             # MLE training
             loss = loss
         else:
             # Policy gradient training
             if user_parameter is not None:
                 #start_time = time.time()
-                src_tokens, target_tokens, hypo_tokens = get_token_translate_from_sample(model,
-                                                                                           user_parameter,
-                                                                                           sample,
-                                                                                           self.scorer,
-                                                                                           self.src_dict,
-                                                                                           self.tgt_dict)
+                src_tokens, target_tokens, hypo_tokens, bleus = get_token_translate_from_sample(model,
+                                                                                                user_parameter,
+                                                                                                sample,
+                                                                                                self.scorer,
+                                                                                                self.src_dict,
+                                                                                                self.tgt_dict)
                 #a = time.time() - start_time
 
                 with torch.no_grad():
-                    reward = user_parameter["discriminator"](target_tokens, hypo_tokens)
+                    #reward = user_parameter["discriminator"](target_tokens, hypo_tokens)
+                    d_out = user_parameter["discriminator"](
+                        src_tokens, hypo_tokens)
+                    reward = self._lamda*(d_out.T[0] - self._beta) + (
+                        1 - self._lamda)*torch.tensor(bleus, dtype=d_out.dtype, device=d_out.device)
 
-                average_reward = torch.sub(1, torch.mean(reward))
-                loss = loss + loss*average_reward
-
+                lprobs, target = self.compute_lprob(model, net_output, sample)
+                lprobs_reward = (lprobs.T*reward).T
+                lprobs_reward = lprobs_reward.view(-1, lprobs_reward.size(-1))
+                
+                loss_reward = F.nll_loss(
+                    lprobs_reward,
+                    target,
+                    ignore_index=self.padding_idx,
+                    reduction="sum" if reduce else "none",
+                    # reduction="none",
+                )
+                #average_reward = torch.mean(reward)
+                loss = loss_reward
+                
         sample_size = (
             sample["target"].size(
                 0) if self.sentence_avg else sample["ntokens"]
@@ -148,6 +235,11 @@ class CrossEntropyCriterion(FairseqCriterion):
 
         return loss, sample_size, logging_output
 
+    def compute_lprob(self, model, net_output, sample):
+        lprobs = model.get_normalized_probs(net_output, log_probs=True)
+        target = model.get_targets(sample, net_output).view(-1)
+        return lprobs, target
+
     def compute_loss(self, model, net_output, sample, reduce=True):
         lprobs = model.get_normalized_probs(net_output, log_probs=True)
         lprobs = lprobs.view(-1, lprobs.size(-1))
@@ -157,6 +249,7 @@ class CrossEntropyCriterion(FairseqCriterion):
             target,
             ignore_index=self.padding_idx,
             reduction="sum" if reduce else "none",
+            # reduction="none",
         )
         return loss, loss
 
