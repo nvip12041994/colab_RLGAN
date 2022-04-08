@@ -390,7 +390,7 @@ def _main(cfg: DictConfig, output_file):
             ),
             file=output_file,
         )
-
+        
     return scorer
 from os import walk
 

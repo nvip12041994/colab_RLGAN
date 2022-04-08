@@ -183,46 +183,81 @@ class CrossEntropyCriterion(FairseqCriterion):
         """
         net_output = model(**sample["net_input"])
         #loss, _ = self.compute_loss(model, net_output, sample, reduce=reduce)
+        
+        if user_parameter is not None:
+            #start_time = time.time()
+            src_tokens, target_tokens, hypo_tokens, bleus = get_token_translate_from_sample(model,
+                                                                                            user_parameter,
+                                                                                            sample,
+                                                                                            self.scorer,
+                                                                                            self.src_dict,
+                                                                                            self.tgt_dict)
+            #a = time.time() - start_time
+
+            with torch.no_grad():
+                #reward = user_parameter["discriminator"](target_tokens, hypo_tokens)
+                d_out = user_parameter["discriminator"](
+                    src_tokens, hypo_tokens)
+                alpha = self._lamda*(d_out.T[0] - self._beta) 
+                beta = ( 1 - self._lamda)*torch.tensor(bleus, dtype=d_out.dtype, device=d_out.device)
+                reward = alpha + beta
+                #log_reward = torch.log(reward)
+
+            lprobs, target = self.compute_lprob(model, net_output, sample)
+            lprobs_reward = (lprobs.T*reward).T
+            lprobs_reward = lprobs_reward.view(-1, lprobs_reward.size(-1))
+            
+            loss_reward = F.nll_loss(
+                lprobs_reward,
+                target,
+                ignore_index=self.padding_idx,
+                reduction="sum" if reduce else "none",
+                # reduction="none",
+            )
+            #average_reward = torch.mean(reward)
+            loss = loss_reward
+        else:
+            loss, _ = self.compute_loss(model, net_output, sample, reduce=reduce)
 
         # real_random_number = int.from_bytes(os.urandom(1), byteorder="big")
         # if real_random_number > 127:
-        if False:
-            # MLE training
-            loss = loss
-        else:
-            # Policy gradient training
-            if user_parameter is not None:
-                #start_time = time.time()
-                src_tokens, target_tokens, hypo_tokens, bleus = get_token_translate_from_sample(model,
-                                                                                                user_parameter,
-                                                                                                sample,
-                                                                                                self.scorer,
-                                                                                                self.src_dict,
-                                                                                                self.tgt_dict)
-                #a = time.time() - start_time
+        # if False:
+        #     # MLE training
+        #     loss = loss
+        # else:
+        #     # Policy gradient training
+        #     if user_parameter is not None:
+        #         #start_time = time.time()
+        #         src_tokens, target_tokens, hypo_tokens, bleus = get_token_translate_from_sample(model,
+        #                                                                                         user_parameter,
+        #                                                                                         sample,
+        #                                                                                         self.scorer,
+        #                                                                                         self.src_dict,
+        #                                                                                         self.tgt_dict)
+        #         #a = time.time() - start_time
 
-                with torch.no_grad():
-                    #reward = user_parameter["discriminator"](target_tokens, hypo_tokens)
-                    d_out = user_parameter["discriminator"](
-                        src_tokens, hypo_tokens)
-                    alpha = self._lamda*(d_out.T[0] - self._beta) 
-                    beta = ( 1 - self._lamda)*torch.tensor(bleus, dtype=d_out.dtype, device=d_out.device)
-                    reward = alpha + beta
-                    log_reward = torch.log(reward)
+        #         with torch.no_grad():
+        #             #reward = user_parameter["discriminator"](target_tokens, hypo_tokens)
+        #             d_out = user_parameter["discriminator"](
+        #                 src_tokens, hypo_tokens)
+        #             alpha = self._lamda*(d_out.T[0] - self._beta) 
+        #             beta = ( 1 - self._lamda)*torch.tensor(bleus, dtype=d_out.dtype, device=d_out.device)
+        #             reward = alpha + beta
+        #             #log_reward = torch.log(reward)
 
-                lprobs, target = self.compute_lprob(model, net_output, sample)
-                lprobs_reward = (lprobs.T*reward).T
-                lprobs_reward = lprobs_reward.view(-1, lprobs_reward.size(-1))
+        #         lprobs, target = self.compute_lprob(model, net_output, sample)
+        #         lprobs_reward = (lprobs.T*reward).T
+        #         lprobs_reward = lprobs_reward.view(-1, lprobs_reward.size(-1))
                 
-                loss_reward = F.nll_loss(
-                    lprobs_reward,
-                    target,
-                    ignore_index=self.padding_idx,
-                    reduction="sum" if reduce else "none",
-                    # reduction="none",
-                )
-                #average_reward = torch.mean(reward)
-                loss = loss_reward
+        #         loss_reward = F.nll_loss(
+        #             lprobs_reward,
+        #             target,
+        #             ignore_index=self.padding_idx,
+        #             reduction="sum" if reduce else "none",
+        #             # reduction="none",
+        #         )
+        #         #average_reward = torch.mean(reward)
+        #         loss = loss_reward
                 
         sample_size = (
             sample["target"].size(
