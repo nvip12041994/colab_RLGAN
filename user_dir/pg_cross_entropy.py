@@ -170,7 +170,7 @@ class CrossEntropyCriterion(FairseqCriterion):
         self.tgt_dict = task.target_dictionary
         self.src_dict = task.source_dictionary
         self.scorer = scoring.build_scorer("bleu", self.tgt_dict)
-        self._beta = 0.5
+        self._beta = 0.0
         self._lamda = 0.7
 
     def forward(self, model, sample, user_parameter=None, reduce=True):
@@ -205,8 +205,10 @@ class CrossEntropyCriterion(FairseqCriterion):
                     #reward = user_parameter["discriminator"](target_tokens, hypo_tokens)
                     d_out = user_parameter["discriminator"](
                         src_tokens, hypo_tokens)
-                    reward = self._lamda*(d_out.T[0] - self._beta) + (
-                        1 - self._lamda)*torch.tensor(bleus, dtype=d_out.dtype, device=d_out.device)
+                    alpha = self._lamda*(d_out.T[0] - self._beta) 
+                    beta = ( 1 - self._lamda)*torch.tensor(bleus, dtype=d_out.dtype, device=d_out.device)
+                    reward = alpha + beta
+                    log_reward = torch.log(reward)
 
                 lprobs, target = self.compute_lprob(model, net_output, sample)
                 lprobs_reward = (lprobs.T*reward).T
