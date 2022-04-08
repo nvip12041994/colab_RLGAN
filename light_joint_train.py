@@ -526,8 +526,8 @@ def train(
             
             # log mid-epoch stats
             num_updates = trainer.get_num_updates()
-            #if num_updates % cfg.common.log_interval == 0:
-            if num_updates % 10 == 0:
+            if num_updates % cfg.common.log_interval == 0:
+            #if num_updates % 10 == 0:
                 stats = get_training_stats(metrics.get_smoothed_values("train_inner"))
                 progress.log(stats, tag="train_inner", step=num_updates)
                 print("discriminator accuracy = {:.2f}".format(discriminator_acc*100))
