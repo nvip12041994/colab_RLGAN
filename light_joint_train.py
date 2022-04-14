@@ -386,7 +386,8 @@ def train(
     max_len_src = epoch_itr.dataset.src.sizes.max()
     max_len_target = epoch_itr.dataset.tgt.sizes.max()
     max_len_hypo = math.ceil(max_len_src*translator.max_len_a) + translator.max_len_b
-    state_list, action_list, reward_list, next_state_list, done_list = [], [], [], [], []
+    # state_list, action_list, reward_list, next_state_list, done_list = [], [], [], [], []
+    returns = []
     user_parameter = {
         "max_len_src": max_len_src,
         "max_len_target": max_len_target,
@@ -397,11 +398,12 @@ def train(
         "d_optimizer": d_optimizer,
         "tokenizer": trainer.task.tokenizer,
         
-        "state_list": state_list,
-        "action_list": action_list,
-        "reward_list": reward_list,
-        "next_state_list": next_state_list,
-        "done_list": done_list,
+        "returns" : returns,
+        # "state_list": state_list,
+        # "action_list": action_list,
+        # "reward_list": reward_list,
+        # "next_state_list": next_state_list,
+        # "done_list": done_list,
     }
     
     scorer = scoring.build_scorer("bleu", task.target_dictionary)
@@ -411,6 +413,7 @@ def train(
         user_parameter["discriminator"].train()
         user_parameter["d_criterion"].train()
         
+        test = user_parameter["returns"]
         fake_labels = Variable(torch.zeros(src_input.size(0)).float())
         fake_labels = fake_labels.to(src_input.device)
         

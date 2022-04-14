@@ -5,6 +5,7 @@
 
 import math
 from dataclasses import dataclass
+from turtle import done
 
 import torch.nn.functional as F
 from fairseq import metrics, utils
@@ -169,10 +170,43 @@ class CrossEntropyCriterion(FairseqCriterion):
 
         self.tgt_dict = task.target_dictionary
         self.src_dict = task.source_dictionary
+        self.vocab_size = len(task.target_dictionary)
         self.scorer = scoring.build_scorer("bleu", self.tgt_dict)
         self._beta = 0.0
         self._lamda = 0.7
+        self.gamma = 0.99
 
+    def _returns_advantages(self, rewards, dones, values, next_value):
+        """Returns the cumulative discounted rewards at each time step
+
+        Parameters
+        ----------
+        rewards : array
+            An array of shape (batch_size,) containing the rewards given by the env
+        dones : array
+            An array of shape (batch_size,) containing the done bool indicator given by the env
+        values : array
+            An array of shape (batch_size,) containing the values given by the value network
+        next_value : float
+            The value of the next state given by the value network
+
+        Returns
+        -------
+        returns : array
+            The cumulative discounted rewards
+        advantages : array
+            The advantages
+        """
+
+        returns = np.append(np.zeros_like(rewards), [next_value.cpu()], axis=0)
+        for t in reversed(range(len(rewards))):
+            returns[t] = rewards[t] + self.gamma * returns[t + 1] * (1 - dones[t])
+
+        returns = returns[:-1] #remove last element
+        returns_tensor = torch.from_numpy(returns)
+        advantages = torch.sub(returns_tensor,values.T[0].cpu())
+        return returns, advantages
+    
     def forward(self, model, sample, user_parameter=None, reduce=True):
         """Compute the loss for the given sample.
 
@@ -182,82 +216,70 @@ class CrossEntropyCriterion(FairseqCriterion):
         3) logging outputs to display while training
         """
         net_output = model(**sample["net_input"])
-        #loss, _ = self.compute_loss(model, net_output, sample, reduce=reduce)
         
+        #loss, _ = self.compute_loss(model, net_output, sample, reduce=reduce)
+        bsz, src_len = sample['net_input']['src_tokens'].size()[:2]
         if user_parameter is not None:
             #start_time = time.time()
-            src_tokens, target_tokens, hypo_tokens, bleus = get_token_translate_from_sample(model,
+            observations, target_tokens, actions, bleus = get_token_translate_from_sample(model,
                                                                                             user_parameter,
                                                                                             sample,
                                                                                             self.scorer,
                                                                                             self.src_dict,
                                                                                             self.tgt_dict)
             #a = time.time() - start_time
-
             with torch.no_grad():
-                #reward = user_parameter["discriminator"](target_tokens, hypo_tokens)
-                d_out = user_parameter["discriminator"](
-                    src_tokens, hypo_tokens)
-                alpha = self._lamda*(d_out.T[0] - self._beta) 
-                beta = ( 1 - self._lamda)*torch.tensor(bleus, dtype=d_out.dtype, device=d_out.device)
-                reward = alpha + beta
-                #log_reward = torch.log(reward)
-
-            lprobs, target = self.compute_lprob(model, net_output, sample)
-            lprobs_reward = (lprobs.T*reward).T
-            lprobs_reward = lprobs_reward.view(-1, lprobs_reward.size(-1))
+                values = user_parameter["discriminator"](observations, actions)
+            dones = np.empty((bsz,), dtype=np.bool_)
             
+            for i,bleu in enumerate(bleus):
+                if bleu >=0.4:
+                    dones[i] = True
+                else:
+                    dones[i] = False
+                        
+            # Update episode_count
+            # If our epiosde didn't end on the last step we need to compute the value for the last state
+            if dones[-1]:
+                next_value = 0
+            else:
+                next_value = values[-1]
+                
+            episode_count = sum(dones)
+            
+            # Compute returns and advantages
+            returns, advantages = self._returns_advantages(bleus, dones, values, next_value)
+            user_parameter["returns"] = returns
+            # Learning step !
+            lprobs, target = self.compute_lprob(model, net_output, sample)
+            #a = lprobs.view(bsz, -1, self.vocab_size),
+            t = F.one_hot(actions, self.vocab_size)
+            # indices_buf = torch.multinomial(
+            #     lprobs.exp_().view(bsz, -1),
+            #     1,
+            #     replacement=True,
+            # ).view(bsz, 1)
+            
+            # l = F.one_hot(indices_buf, self.vocab_size)
+            
+            loss_entropy = - (torch.exp(lprobs)* lprobs).sum(-1).mean()
+            lprobs = (lprobs.T*advantages.to(lprobs.device)).T
+            
+            lprobs = lprobs.view(-1, lprobs.size(-1))
             loss_reward = F.nll_loss(
-                lprobs_reward,
+                lprobs,
                 target,
                 ignore_index=self.padding_idx,
                 reduction="sum" if reduce else "none",
                 # reduction="none",
             )
             #average_reward = torch.mean(reward)
-            loss = loss_reward
+            loss = loss_reward + loss_entropy
         else:
             loss, _ = self.compute_loss(model, net_output, sample, reduce=reduce)
 
         # real_random_number = int.from_bytes(os.urandom(1), byteorder="big")
         # if real_random_number > 127:
-        # if False:
-        #     # MLE training
-        #     loss = loss
-        # else:
-        #     # Policy gradient training
-        #     if user_parameter is not None:
-        #         #start_time = time.time()
-        #         src_tokens, target_tokens, hypo_tokens, bleus = get_token_translate_from_sample(model,
-        #                                                                                         user_parameter,
-        #                                                                                         sample,
-        #                                                                                         self.scorer,
-        #                                                                                         self.src_dict,
-        #                                                                                         self.tgt_dict)
-        #         #a = time.time() - start_time
-
-        #         with torch.no_grad():
-        #             #reward = user_parameter["discriminator"](target_tokens, hypo_tokens)
-        #             d_out = user_parameter["discriminator"](
-        #                 src_tokens, hypo_tokens)
-        #             alpha = self._lamda*(d_out.T[0] - self._beta) 
-        #             beta = ( 1 - self._lamda)*torch.tensor(bleus, dtype=d_out.dtype, device=d_out.device)
-        #             reward = alpha + beta
-        #             #log_reward = torch.log(reward)
-
-        #         lprobs, target = self.compute_lprob(model, net_output, sample)
-        #         lprobs_reward = (lprobs.T*reward).T
-        #         lprobs_reward = lprobs_reward.view(-1, lprobs_reward.size(-1))
-                
-        #         loss_reward = F.nll_loss(
-        #             lprobs_reward,
-        #             target,
-        #             ignore_index=self.padding_idx,
-        #             reduction="sum" if reduce else "none",
-        #             # reduction="none",
-        #         )
-        #         #average_reward = torch.mean(reward)
-        #         loss = loss_reward
                 
         sample_size = (
             sample["target"].size(
@@ -273,7 +295,7 @@ class CrossEntropyCriterion(FairseqCriterion):
         return loss, sample_size, logging_output
 
     def compute_lprob(self, model, net_output, sample):
-        lprobs = model.get_normalized_probs(net_output, log_probs=True)
+        lprobs = model.get_normalized_probs(net_output, log_probs=True)        
         target = model.get_targets(sample, net_output).view(-1)
         return lprobs, target
 
