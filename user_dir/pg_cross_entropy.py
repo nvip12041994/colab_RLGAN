@@ -5,7 +5,6 @@
 
 import math
 from dataclasses import dataclass
-from turtle import done
 
 import torch.nn.functional as F
 from fairseq import metrics, utils
@@ -204,8 +203,9 @@ class CrossEntropyCriterion(FairseqCriterion):
 
         returns = returns[:-1] #remove last element
         returns_tensor = torch.from_numpy(returns)
+        returns_tensor = torch.divide(returns_tensor,returns_tensor.shape[0])
         advantages = torch.sub(returns_tensor,values.T[0].cpu())
-        return returns, advantages
+        return returns_tensor.numpy(), advantages
     
     def forward(self, model, sample, user_parameter=None, reduce=True):
         """Compute the loss for the given sample.
@@ -245,7 +245,7 @@ class CrossEntropyCriterion(FairseqCriterion):
             else:
                 next_value = values[-1]
                 
-            episode_count = sum(dones)
+            #episode_count = sum(dones)
             
             # Compute returns and advantages
             returns, advantages = self._returns_advantages(bleus, dones, values, next_value)

@@ -412,9 +412,11 @@ def train(
     def train_discriminator(user_parameter,hypo_input,src_input,target_input,bleu):
         user_parameter["discriminator"].train()
         user_parameter["d_criterion"].train()
-        
-        test = user_parameter["returns"]
-        fake_labels = Variable(torch.zeros(src_input.size(0)).float())
+        returns = user_parameter["returns"]
+        if returns.size == 0:
+            fake_labels = Variable(torch.zeros(src_input.size(0)).float())
+        else:
+            fake_labels = Variable(torch.tensor(returns).float())
         fake_labels = fake_labels.to(src_input.device)
         
         true_labels = Variable(torch.ones(target_input.size(0)).float())
@@ -431,7 +433,7 @@ def train(
         d_loss = user_parameter["d_criterion"](batch_input, labels)
         
         
-        acc = torch.sum(torch.round(input_d_loss).squeeze(1) == labels).float() / len(labels)
+        acc = torch.sum(torch.round(input_d_loss).squeeze(1) == torch.round(labels)).float() / len(labels)
         user_parameter["d_optimizer"].zero_grad()
         d_loss.backward()
         user_parameter["d_optimizer"].step()
