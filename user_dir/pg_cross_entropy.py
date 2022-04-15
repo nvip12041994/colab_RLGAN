@@ -232,7 +232,7 @@ class CrossEntropyCriterion(FairseqCriterion):
             dones = np.empty((bsz,), dtype=np.bool_)
             
             for i,bleu in enumerate(bleus):
-                if bleu >=0.4:
+                if bleu >=0.8:
                     dones[i] = True
                 else:
                     dones[i] = False
