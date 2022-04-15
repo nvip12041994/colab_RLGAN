@@ -171,7 +171,7 @@ class CrossEntropyCriterion(FairseqCriterion):
         self.src_dict = task.source_dictionary
         self.vocab_size = len(task.target_dictionary)
         self.scorer = scoring.build_scorer("bleu", self.tgt_dict)
-        self.entropy_coeff = 0.1
+        self.entropy_coeff = 1
         self.gamma = 0.99
 
     def _returns_advantages(self, rewards, dones, values, next_value):
