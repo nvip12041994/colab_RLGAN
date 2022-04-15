@@ -171,8 +171,7 @@ class CrossEntropyCriterion(FairseqCriterion):
         self.src_dict = task.source_dictionary
         self.vocab_size = len(task.target_dictionary)
         self.scorer = scoring.build_scorer("bleu", self.tgt_dict)
-        self._beta = 0.0
-        self._lamda = 0.7
+        self.entropy_coeff = 0.1
         self.gamma = 0.99
 
     def _returns_advantages(self, rewards, dones, values, next_value):
@@ -270,11 +269,11 @@ class CrossEntropyCriterion(FairseqCriterion):
                 lprobs,
                 target,
                 ignore_index=self.padding_idx,
-                reduction="sum" if reduce else "none",
+                reduction="mean" if reduce else "none",
                 # reduction="none",
             )
             #average_reward = torch.mean(reward)
-            loss = - loss_reward + 0.0001 * loss_entropy
+            loss = - loss_reward + self.entropy_coeff * loss_entropy
         else:
             loss, _ = self.compute_loss(model, net_output, sample, reduce=reduce)
 
@@ -307,7 +306,7 @@ class CrossEntropyCriterion(FairseqCriterion):
             lprobs,
             target,
             ignore_index=self.padding_idx,
-            reduction="sum" if reduce else "none",
+            reduction="mean" if reduce else "none",
             # reduction="none",
         )
         return loss, loss
