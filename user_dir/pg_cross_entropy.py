@@ -274,7 +274,7 @@ class CrossEntropyCriterion(FairseqCriterion):
                 # reduction="none",
             )
             #average_reward = torch.mean(reward)
-            loss = loss_reward + loss_entropy
+            loss = - loss_reward + 0.0001 * loss_entropy
         else:
             loss, _ = self.compute_loss(model, net_output, sample, reduce=reduce)
 
