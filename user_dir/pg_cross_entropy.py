@@ -261,7 +261,7 @@ class CrossEntropyCriterion(FairseqCriterion):
             
             # l = F.one_hot(indices_buf, self.vocab_size)
             
-            loss_entropy = - (torch.exp(lprobs)* lprobs).sum(-1)
+            loss_entropy = - (torch.exp(lprobs)* lprobs).sum(-1).mean()
             lprobs = (lprobs.T*advantages.to(lprobs.device)).T
             
             lprobs = lprobs.view(-1, lprobs.size(-1))
@@ -269,7 +269,7 @@ class CrossEntropyCriterion(FairseqCriterion):
                 lprobs,
                 target,
                 ignore_index=self.padding_idx,
-                reduction="sum" if reduce else "none",
+                reduction="mean" if reduce else "none",
                 # reduction="none",
             )
             #average_reward = torch.mean(reward)
@@ -320,7 +320,7 @@ class CrossEntropyCriterion(FairseqCriterion):
 
         # we divide by log(2) to convert the loss from base e to base 2
         metrics.log_scalar(
-            "loss", loss_sum / sample_size / math.log(2), sample_size, round=3
+            "loss", loss_sum / math.log(2), sample_size, round=3
         )
         if sample_size != ntokens:
             metrics.log_scalar(
