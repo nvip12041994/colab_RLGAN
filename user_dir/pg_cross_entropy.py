@@ -253,7 +253,7 @@ class CrossEntropyCriterion(FairseqCriterion):
             # Learning step !
             lprobs, target = self.compute_lprob(model, net_output, sample)
             #a = lprobs.view(bsz, -1, self.vocab_size),
-            t = F.one_hot(actions, self.vocab_size)
+            #t = F.one_hot(actions, self.vocab_size)
             # indices_buf = torch.multinomial(
             #     lprobs.exp_().view(bsz, -1),
             #     1,
