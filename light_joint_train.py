@@ -198,14 +198,23 @@ def main(cfg: FairseqConfig) -> None:
 
     print("Policy gradient criterion loaded successfully!")
     # Initialize generator
+    # translator = SequenceGenerator(
+    #     [model],
+    #     task.tgt_dict,
+    #     search_strategy = search.Sampling(tgt_dict = task.tgt_dict,sampling_topk=-1, sampling_topp=0.95),
+        
+    #     beam_size=1,
+    #     max_len_a=1.2,
+    #     max_len_b=10,
+    # )
+    
     translator = SequenceGenerator(
         [model],
         task.tgt_dict,
         search_strategy = search.Sampling(tgt_dict = task.tgt_dict,sampling_topk=-1, sampling_topp=0.95),
         
         beam_size=1,
-        max_len_a=1.2,
-        max_len_b=10,
+        match_source_len=True,
     )
 
     # if use_cuda:

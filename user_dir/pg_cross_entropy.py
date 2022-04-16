@@ -171,7 +171,7 @@ class CrossEntropyCriterion(FairseqCriterion):
         self.src_dict = task.source_dictionary
         self.vocab_size = len(task.target_dictionary)
         self.scorer = scoring.build_scorer("bleu", self.tgt_dict)
-        self.entropy_coeff = 1
+        self.entropy_coeff = 0.01
         self.gamma = 0.99
 
     def _returns_advantages(self, rewards, dones, values, next_value):
@@ -202,7 +202,7 @@ class CrossEntropyCriterion(FairseqCriterion):
 
         returns = returns[:-1] #remove last element
         returns_tensor = torch.from_numpy(returns)
-        returns_tensor = torch.divide(returns_tensor,returns_tensor.shape[0])
+        #returns_tensor = torch.divide(returns_tensor,returns_tensor.shape[0])
         advantages = torch.sub(returns_tensor,values.T[0].cpu())
         return returns_tensor.numpy(), advantages
     
@@ -232,7 +232,7 @@ class CrossEntropyCriterion(FairseqCriterion):
             dones = np.empty((bsz,), dtype=np.bool_)
             
             for i,bleu in enumerate(bleus):
-                if bleu >=0.8:
+                if bleu >=0.5:
                     dones[i] = True
                 else:
                     dones[i] = False
@@ -261,19 +261,21 @@ class CrossEntropyCriterion(FairseqCriterion):
             
             # l = F.one_hot(indices_buf, self.vocab_size)
             
-            loss_entropy = - (torch.exp(lprobs)* lprobs).sum(-1).mean()
-            lprobs = (lprobs.T*advantages.to(lprobs.device)).T
+            loss_entropy = (torch.exp(lprobs)* lprobs).sum(-1).mean()
+            #lprobs = (lprobs.T*advantages.to(lprobs.device)).T
             
             lprobs = lprobs.view(-1, lprobs.size(-1))
-            loss_reward = F.nll_loss(
+            loss_action = F.nll_loss(
                 lprobs,
                 target,
                 ignore_index=self.padding_idx,
-                reduction="mean" if reduce else "none",
-                # reduction="none",
+                #reduction="mean" if reduce else "none",
+                reduction="none",
             )
             #average_reward = torch.mean(reward)
-            loss = - loss_reward + self.entropy_coeff * loss_entropy
+            loss = loss_action.view(-1,bsz) * advantages.to(lprobs.device) 
+            loss = torch.mean(loss) + self.entropy_coeff * loss_entropy
+            #loss = loss_action + self.entropy_coeff * loss_entropy
         else:
             loss, _ = self.compute_loss(model, net_output, sample, reduce=reduce)
 
