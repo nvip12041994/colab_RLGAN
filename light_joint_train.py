@@ -412,11 +412,12 @@ def train(
     def train_discriminator(user_parameter,hypo_input,src_input,target_input,bleu):
         user_parameter["discriminator"].train()
         user_parameter["d_criterion"].train()
-        returns = user_parameter["returns"]
-        if returns.size == 0:
-            fake_labels = Variable(torch.zeros(src_input.size(0)).float())
-        else:
-            fake_labels = Variable(torch.tensor(returns).float())
+        # returns = user_parameter["returns"]
+        # if returns.size == 0:
+        #     fake_labels = Variable(torch.zeros(src_input.size(0)).float())
+        # else:
+        #     fake_labels = Variable(torch.tensor(returns).float())
+        fake_labels = Variable(torch.zeros(src_input.size(0)).float())
         fake_labels = fake_labels.to(src_input.device)
         
         true_labels = Variable(torch.ones(target_input.size(0)).float())
