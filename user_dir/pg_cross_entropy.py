@@ -219,68 +219,70 @@ class CrossEntropyCriterion(FairseqCriterion):
         #loss, _ = self.compute_loss(model, net_output, sample, reduce=reduce)
         bsz, src_len = sample['net_input']['src_tokens'].size()[:2]
         if user_parameter is not None:
-            #start_time = time.time()
-            observations, target_tokens, actions, bleus = get_token_translate_from_sample(model,
-                                                                                            user_parameter,
-                                                                                            sample,
-                                                                                            self.scorer,
-                                                                                            self.src_dict,
-                                                                                            self.tgt_dict)
-            #a = time.time() - start_time
-            with torch.no_grad():
-                values = user_parameter["discriminator"](observations, actions)
-            dones = np.empty((bsz,), dtype=np.bool_)
-            
-            for i,bleu in enumerate(bleus):
-                if bleu >=0.5:
-                    dones[i] = True
-                else:
-                    dones[i] = False
-                        
-            # Update episode_count
-            # If our epiosde didn't end on the last step we need to compute the value for the last state
-            if dones[-1]:
-                next_value = 0
-            else:
-                next_value = values[-1]
+            real_random_number = int.from_bytes(os.urandom(1), byteorder="big")
+            if real_random_number > 127:
+                #start_time = time.time()
+                observations, target_tokens, actions, bleus = get_token_translate_from_sample(model,
+                                                                                                user_parameter,
+                                                                                                sample,
+                                                                                                self.scorer,
+                                                                                                self.src_dict,
+                                                                                                self.tgt_dict)
+                #a = time.time() - start_time
+                with torch.no_grad():
+                    values = user_parameter["discriminator"](observations, actions)
+                dones = np.empty((bsz,), dtype=np.bool_)
                 
-            #episode_count = sum(dones)
-            
-            # Compute returns and advantages
-            returns, advantages = self._returns_advantages(bleus, dones, values, next_value)
-            user_parameter["returns"] = returns
-            # Learning step !
-            lprobs, target = self.compute_lprob(model, net_output, sample)
-            #a = lprobs.view(bsz, -1, self.vocab_size),
-            #t = F.one_hot(actions, self.vocab_size)
-            # indices_buf = torch.multinomial(
-            #     lprobs.exp_().view(bsz, -1),
-            #     1,
-            #     replacement=True,
-            # ).view(bsz, 1)
-            
-            # l = F.one_hot(indices_buf, self.vocab_size)
-            
-            loss_entropy = (torch.exp(lprobs)* lprobs).sum(-1).mean()
-            #lprobs = (lprobs.T*advantages.to(lprobs.device)).T
-            
-            lprobs = lprobs.view(-1, lprobs.size(-1))
-            loss_action = F.nll_loss(
-                lprobs,
-                target,
-                ignore_index=self.padding_idx,
-                #reduction="mean" if reduce else "none",
-                reduction="none",
-            )
-            #average_reward = torch.mean(reward)
-            loss = loss_action.view(-1,bsz) * advantages.to(lprobs.device) 
-            loss = torch.mean(loss) + self.entropy_coeff * loss_entropy
-            #loss = loss_action + self.entropy_coeff * loss_entropy
+                for i,bleu in enumerate(bleus):
+                    if bleu >=0.5:
+                        dones[i] = True
+                    else:
+                        dones[i] = False
+                            
+                # Update episode_count
+                # If our epiosde didn't end on the last step we need to compute the value for the last state
+                if dones[-1]:
+                    next_value = 0
+                else:
+                    next_value = values[-1]
+                    
+                #episode_count = sum(dones)
+                
+                # Compute returns and advantages
+                returns, advantages = self._returns_advantages(bleus, dones, values, next_value)
+                user_parameter["returns"] = returns
+                # Learning step !
+                lprobs, target = self.compute_lprob(model, net_output, sample)
+                #a = lprobs.view(bsz, -1, self.vocab_size),
+                #t = F.one_hot(actions, self.vocab_size)
+                # indices_buf = torch.multinomial(
+                #     lprobs.exp_().view(bsz, -1),
+                #     1,
+                #     replacement=True,
+                # ).view(bsz, 1)
+                
+                # l = F.one_hot(indices_buf, self.vocab_size)
+                
+                loss_entropy = (torch.exp(lprobs)* lprobs).sum(-1).mean()
+                #lprobs = (lprobs.T*advantages.to(lprobs.device)).T
+                
+                lprobs = lprobs.view(-1, lprobs.size(-1))
+                loss_action = F.nll_loss(
+                    lprobs,
+                    target,
+                    ignore_index=self.padding_idx,
+                    #reduction="mean" if reduce else "none",
+                    reduction="none",
+                )
+                #average_reward = torch.mean(reward)
+                loss = loss_action.view(-1,bsz) * advantages.to(lprobs.device) 
+                loss = torch.mean(loss) + self.entropy_coeff * loss_entropy
+            else:
+                loss, _ = self.compute_loss(model, net_output, sample, reduce=reduce)
         else:
             loss, _ = self.compute_loss(model, net_output, sample, reduce=reduce)
 
-        # real_random_number = int.from_bytes(os.urandom(1), byteorder="big")
-        # if real_random_number > 127:
+        
                 
         sample_size = (
             sample["target"].size(
